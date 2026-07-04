@@ -9,9 +9,9 @@ NoticeBoard is a modern, dark-themed local desktop application built with WPF an
 -  **Detailed Card Flyout**: Open a large flyout panel for detailed titles, notes, border highlight customization, and attached images.
 -  **Visual Highlighting**: Color-code cards with pre-configured color schemes in the application style.
 -  **Visual Reference Images**: Attach images to cards (saved locally at `%APPDATA%\NoticeBoard\Card Images\`). Click any image thumbnail to pop it out into a draggable, resizable, borderless window to keep on your desktop.
--  **Import & Export (.noticecard)**: Package any card with its details and attached images into a portable `.noticecard` zip archive to share with others.
--  **Gemini AI Assistant**: Stream responses directly inside a collapsible, fully hideable panel. (Toggle in settings and supply your own Gemini API Key).
--  **Premium Dark Theme**: Sleek, customizable modern styling, with dark-themed custom confirmations.
+-  **Import & Export (.noticecard)**: Share any card with its details and attached images into a portable `.noticecard` zip archive to share with others.
+-  **Gemini AI Assistant**: Use and get responses directly inside a collapsible, fully hideable panel. (Toggle in settings and supply your own Gemini API Key).
+-  **Premium Dark Theme**: Sleek, customizable modern styling, with dark-themes. (More Colour editability to come)
 
 ## How to Build & Run
 
@@ -32,3 +32,8 @@ dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyTo
 
 ## License
 Refer to the `LICENSE` file for permissions and mandatory backwards compatibility guidelines.
+
+
+Disclamer im open with it, i do use AI in my workflow for structureing (Cleanup/error checking and output) 
+My main Form for codeing is VSCode
+(if you see any messy lines give me a shout)
