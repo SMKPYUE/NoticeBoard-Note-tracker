@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         Title="NoticeBoard" Height="720" Width="1120"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        FontFamily="Segoe UI">
+        FontFamily="Segoe UI" PreviewKeyDown="Window_PreviewKeyDown">
 
     <!-- WindowChrome enables native resize on borderless window -->
     <WindowChrome.WindowChrome>
@@ -23,6 +23,10 @@
 
         <!-- Converter for custom border colors -->
         <local:BorderColorConverter x:Key="BorderColorConverter"/>
+        
+        <!-- Custom Background & Count converters -->
+        <local:BackgroundImageConverter x:Key="BackgroundImageConverter"/>
+        <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
 
         <!-- Circular Color Button Style -->
         <Style x:Key="CircularColorButtonStyle" TargetType="Button">
@@ -389,7 +393,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="#1e1e28" BorderThickness="1.5" CornerRadius="8" Margin="8" Width="250" Height="300"
+                                    <Border Background="{Binding BackgroundImagePath, Converter={StaticResource BackgroundImageConverter}, TargetNullValue={x:Null}, FallbackValue=#1e1e28}" BorderThickness="1.5" CornerRadius="8" Margin="8" Width="250" Height="300"
                                             BorderBrush="{Binding BorderColor, Converter={StaticResource BorderColorConverter}}"
                                             PreviewMouseLeftButtonDown="Card_PreviewMouseLeftButtonDown" MouseMove="Card_MouseMove" 
                                             AllowDrop="True" Drop="Card_Drop" DragOver="Card_DragOver"
@@ -405,9 +409,9 @@
                                                 </Style.Triggers>
                                             </Style>
                                         </Border.Style>
-                                        <Border.RenderTransform>
-                                            <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                        </Border.RenderTransform>
+                                        <Border.LayoutTransform>
+                                            <ScaleTransform ScaleX="{Binding ScaleFactor}" ScaleY="{Binding ScaleFactor}"/>
+                                        </Border.LayoutTransform>
                                         <Border.Effect>
                                             <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="3" Opacity="0.4"/>
                                         </Border.Effect>
@@ -421,8 +425,11 @@
 
                                             <!-- Title of the Card -->
                                             <TextBox Grid.Row="0" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" 
-                                                     Background="#14141c" Foreground="#ffffff" BorderBrush="#2e2e3d" BorderThickness="1" 
-                                                     Padding="8,6" FontSize="13" FontWeight="Bold" Margin="0,0,0,8" CaretBrush="#ffffff"/>
+                                                     Background="Transparent" 
+                                                     Foreground="{Binding ForegroundColor, Converter={StaticResource BorderColorConverter}, TargetNullValue={x:Null}, FallbackValue=#ffffff}" 
+                                                     BorderThickness="0" 
+                                                     Padding="4,6" FontSize="13" FontWeight="Bold" Margin="0,0,0,8" CaretBrush="#ffffff"
+                                                     FontFamily="{Binding FontFamilyName}"/>
 
                                             <!-- Tag selection on the Card -->
                                             <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
@@ -430,15 +437,19 @@
                                                 <ComboBox ItemsSource="{Binding DataContext.AvailableTagsWithNone, RelativeSource={RelativeSource AncestorType=Window}}"
                                                           SelectedItem="{Binding CardTag, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                           Style="{StaticResource DarkComboBoxStyle}"
-                                                          Height="26" Width="120" FontSize="11" VerticalContentAlignment="Center"/>
-                                                <Button Content="📝" Click="EditCardDetails_Click" Style="{StaticResource AccentButtonStyle}" Width="28" Height="26" Margin="6,0,0,0" Padding="0" FontSize="11" ToolTip="Edit Details / Add Images"/>
+                                                          Height="26" Width="100" FontSize="11" VerticalContentAlignment="Center"/>
+                                                <Button Content="📝" Click="EditCardDetails_Click" Style="{StaticResource AccentButtonStyle}" Width="26" Height="26" Margin="4,0,0,0" Padding="0" FontSize="11" ToolTip="Edit Details / Add Images"/>
+                                                <Button Content="↗" Click="PopOutCard_Click" Style="{StaticResource AccentButtonStyle}" Width="26" Height="26" Margin="4,0,0,0" Padding="0" FontSize="11" FontWeight="Bold" ToolTip="Pop Out Standalone Note Window"/>
                                             </StackPanel>
 
                                             <!-- Content of the Card -->
                                             <TextBox Grid.Row="2" Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}" 
-                                                     Background="#14141c" Foreground="#dcdce5" BorderBrush="#2e2e3d" BorderThickness="1" 
-                                                     Padding="8" FontSize="12" AcceptsReturn="True" TextWrapping="Wrap" 
-                                                     VerticalScrollBarVisibility="Auto" CaretBrush="#ffffff" AcceptsTab="True"/>
+                                                     Background="Transparent" 
+                                                     Foreground="{Binding ForegroundColor, Converter={StaticResource BorderColorConverter}, TargetNullValue={x:Null}, FallbackValue=#dcdce5}" 
+                                                     BorderThickness="0" 
+                                                     Padding="4" FontSize="12" AcceptsReturn="True" TextWrapping="Wrap" 
+                                                     VerticalScrollBarVisibility="Auto" CaretBrush="#ffffff" AcceptsTab="True"
+                                                     FontFamily="{Binding FontFamilyName}"/>
 
                                             <!-- Bottom control panel inside Card -->
                                             <Grid Grid.Row="3" Margin="0,10,0,0">
@@ -577,6 +588,41 @@
                                     </Style>
                                 </CheckBox.Resources>
                             </CheckBox>
+
+                            <!-- Disable GPU Hardware Acceleration -->
+                            <CheckBox x:Name="DisableHardwareAccelerationCheckbox" Content="Disable GPU Hardware Acceleration (Software Only)" Foreground="#ffffff" FontSize="13" Margin="0,10,0,0" VerticalContentAlignment="Center" ToolTip="Check this if you experience graphics driver resets or crashes while overlaying games.">
+                                <CheckBox.Resources>
+                                    <Style TargetType="CheckBox">
+                                        <Setter Property="Cursor" Value="Hand"/>
+                                    </Style>
+                                </CheckBox.Resources>
+                            </CheckBox>
+
+                            <!-- Reset Flyout Scale / Size button -->
+                            <Button Content="Reset Flyout Scale &amp; Window Sizes" Click="ResetFlyoutScale_Click" Style="{StaticResource AccentButtonStyle}" Height="28" Margin="0,16,0,12"/>
+
+                            <!-- Global Hotkeys Config Expander -->
+                            <Expander Header="Global System Hotkeys" Foreground="#ffffff" FontSize="12.5" FontWeight="SemiBold" BorderBrush="#2d2d3d" BorderThickness="0,1,0,1" Margin="0,4,0,16" Padding="0,8">
+                                <StackPanel Orientation="Vertical" Margin="0,8,0,0">
+                                    <!-- Enable global hotkeys checkbox -->
+                                    <CheckBox x:Name="EnableGlobalHotkeysCheckbox" Content="Enable Global Keybinds" Checked="EnableHotkeys_CheckedChanged" Unchecked="EnableHotkeys_CheckedChanged" Foreground="#ffffff" FontSize="12" Margin="0,0,0,12" VerticalContentAlignment="Center">
+                                    </CheckBox>
+
+                                    <!-- Hotkey keybind fields (Key Recorder buttons) -->
+                                    <TextBlock Text="New Note Hotkey:" Foreground="#a0a0b5" FontSize="11.5" Margin="0,0,0,4"/>
+                                    <Button x:Name="HotkeyNewNoteBtn" Content="Ctrl+Shift+N" Click="HotkeyRecordBtn_Click" Style="{StaticResource AccentButtonStyle}" HorizontalContentAlignment="Left" Padding="10,6" Height="32" Margin="0,0,0,10" ToolTip="Click to record hotkey"/>
+
+                                    <TextBlock Text="Focus Popout Hotkey:" Foreground="#a0a0b5" FontSize="11.5" Margin="0,0,0,4"/>
+                                    <Button x:Name="HotkeyFocusNoteBtn" Content="Ctrl+Shift+F" Click="HotkeyRecordBtn_Click" Style="{StaticResource AccentButtonStyle}" HorizontalContentAlignment="Left" Padding="10,6" Height="32" Margin="0,0,0,10" ToolTip="Click to record hotkey"/>
+
+                                    <TextBlock Text="Toggle Click-Through Hotkey:" Foreground="#a0a0b5" FontSize="11.5" Margin="0,0,0,4"/>
+                                    <Button x:Name="HotkeyToggleLockBtn" Content="Ctrl+Shift+K" Click="HotkeyRecordBtn_Click" Style="{StaticResource AccentButtonStyle}" HorizontalContentAlignment="Left" Padding="10,6" Height="32" Margin="0,0,0,14" ToolTip="Click to record hotkey"/>
+
+                                    <!-- Blocklist of apps -->
+                                    <TextBlock Text="Block Global Hotkeys in these apps:" Foreground="#a0a0b5" FontSize="11.5" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="BlockedProcessesBox" ToolTip="Enter process names (e.g. discord, chrome, notepad, msdev) separated by commas. Hotkeys will be ignored when these apps have window focus." Background="#1e1e28" Foreground="#ffffff" BorderBrush="#2d2d3d" BorderThickness="1" Padding="6,4" FontSize="12" Margin="0,0,0,6" CaretBrush="#ffffff"/>
+                                </StackPanel>
+                            </Expander>
                         </StackPanel>
 
                         <!-- Buttons -->
@@ -662,10 +708,14 @@
             <Grid x:Name="CardDetailOverlay" Grid.Row="0" Grid.RowSpan="2" Background="#cc080810" Visibility="Collapsed">
                 <Border Background="#1a1a24" BorderBrush="#3a3a4c" BorderThickness="1.5" CornerRadius="10" 
                         Padding="24" Width="780" Height="580" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border.LayoutTransform>
+                        <ScaleTransform ScaleX="{Binding ScaleFactor}" ScaleY="{Binding ScaleFactor}"/>
+                    </Border.LayoutTransform>
                     <Border.Effect>
                         <DropShadowEffect Color="#000000" BlurRadius="25" ShadowDepth="6" Opacity="0.7"/>
                     </Border.Effect>
-                    <Grid x:Name="CardDetailGrid">
+                    <Grid>
+                        <Grid x:Name="CardDetailGrid">
                         <Grid.RowDefinitions>
                             <!-- Title & Close -->
                             <RowDefinition Height="Auto"/>
@@ -684,7 +734,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="DetailTitleBox" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
-                                     Background="#14141c" Foreground="#ffffff" BorderBrush="#2e2e3d" BorderThickness="1" 
+                                     Background="#14141c" Foreground="{Binding ForegroundColor, Converter={StaticResource BorderColorConverter}, TargetNullValue={x:Null}, FallbackValue=#ffffff}" BorderBrush="#2e2e3d" BorderThickness="1" 
                                      Padding="10,8" FontSize="16" FontWeight="Bold" CaretBrush="#ffffff" VerticalContentAlignment="Center"/>
                             <Button Content="✕" Click="CloseCardDetail_Click" Grid.Column="1" Style="{StaticResource TitleBarButtonStyle}" Width="36" Height="36" Margin="10,0,0,0" FontSize="14"/>
                         </Grid>
@@ -703,39 +753,113 @@
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
                                 <TextBlock Text="Detailed Story Notes &amp; beats:" Foreground="#a0a0b5" FontSize="12.5" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                <TextBox Grid.Row="1" x:Name="DetailContentBox" Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
-                                         Background="#14141c" Foreground="#dcdce5" BorderBrush="#2e2e3d" BorderThickness="1" 
-                                         Padding="10" FontSize="13.5" AcceptsReturn="True" TextWrapping="Wrap" 
-                                         VerticalScrollBarVisibility="Auto" CaretBrush="#ffffff" AcceptsTab="True"/>
+                                <Border Grid.Row="1" BorderBrush="#2e2e3d" BorderThickness="1" CornerRadius="4" ClipToBounds="True">
+                                    <Grid Background="{Binding BackgroundImagePath, Converter={StaticResource BackgroundImageConverter}, TargetNullValue={x:Null}, FallbackValue=#14141c}">
+                                        <TextBox x:Name="DetailContentBox" Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
+                                                 Background="Transparent" 
+                                                 Foreground="{Binding ForegroundColor, Converter={StaticResource BorderColorConverter}, TargetNullValue={x:Null}, FallbackValue=#dcdce5}" 
+                                                 BorderThickness="0" 
+                                                 Padding="10" FontSize="13.5" AcceptsReturn="True" TextWrapping="Wrap" 
+                                                 VerticalScrollBarVisibility="Auto" CaretBrush="#ffffff" AcceptsTab="True"
+                                                 FontFamily="{Binding FontFamilyName}">
+                                            <TextBox.LayoutTransform>
+                                                <ScaleTransform ScaleX="{Binding ScaleFactor}" ScaleY="{Binding ScaleFactor}"/>
+                                            </TextBox.LayoutTransform>
+                                        </TextBox>
+                                    </Grid>
+                                </Border>
                             </Grid>
 
-                            <!-- Right: Controls (Tag, Color picker, Export) -->
-                            <StackPanel Grid.Column="1" Orientation="Vertical">
-                                <!-- Tag selection -->
-                                <TextBlock Text="Card Tag:" Foreground="#a0a0b5" FontSize="12.5" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                <ComboBox ItemsSource="{Binding AvailableTagsWithNone}"
-                                          SelectedItem="{Binding CardTag, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          Style="{StaticResource DarkComboBoxStyle}"
-                                          Height="32" Margin="0,0,0,20" VerticalContentAlignment="Center"/>
+                            <!-- Right: Controls (Tag, Color picker, Styles, Export) -->
+                            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel Orientation="Vertical" Margin="0,0,4,0">
+                                    <!-- Tag selection -->
+                                    <TextBlock Text="Card Tag:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <ComboBox ItemsSource="{Binding AvailableTagsWithNone}"
+                                              SelectedItem="{Binding CardTag, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              Style="{StaticResource DarkComboBoxStyle}"
+                                              Height="30" Margin="0,0,0,12" VerticalContentAlignment="Center"/>
 
-                                <!-- Border Color Selection -->
-                                <TextBlock Text="Border Highlight Color:" Foreground="#a0a0b5" FontSize="12.5" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                <UniformGrid Columns="3" Rows="3" Margin="0,0,0,20" HorizontalAlignment="Left">
-                                    <!-- Circular Color buttons inside UniformGrid -->
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="" ToolTip="Default" BorderThickness="1" BorderBrush="#3a3a4c" Background="#22222c"/>
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#00bfa5" ToolTip="Teal" Background="#00bfa5"/>
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#ff6d00" ToolTip="Orange" Background="#ff6d00"/>
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#00c853" ToolTip="Green" Background="#00c853"/>
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#ff007f" ToolTip="Pink" Background="#ff007f"/>
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#5c2dd5" ToolTip="Purple" Background="#5c2dd5"/>
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#d32f2f" ToolTip="Red" Background="#d32f2f"/>
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#fbc02d" ToolTip="Yellow" Background="#fbc02d"/>
-                                    <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#1976d2" ToolTip="Blue" Background="#1976d2"/>
-                                </UniformGrid>
+                                    <!-- Font selection -->
+                                    <TextBlock Text="Font Family:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.SystemFontsList, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              SelectedItem="{Binding FontFamilyName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              Style="{StaticResource DarkComboBoxStyle}"
+                                              Height="30" Margin="0,0,0,12" VerticalContentAlignment="Center">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" FontFamily="{Binding}" FontSize="12.5"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
 
-                                <!-- Export specific card -->
-                                <Button Content="📤 Share Card (.noticecard)" Click="ExportCard_Click" Style="{StaticResource AccentButtonStyle}" Height="34" Margin="0,8,0,0"/>
-                            </StackPanel>
+                                    <!-- Background Customization -->
+                                    <TextBlock Text="Background Texture:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Button Grid.Column="0" Grid.Row="0" Content="Default" Click="BackgroundDefault_Click" Style="{StaticResource AccentButtonStyle}" Height="26" Margin="0,0,3,4" Padding="0" FontSize="11"/>
+                                        <Button Grid.Column="1" Grid.Row="0" Content="Parchment" Click="BackgroundParchment_Click" Style="{StaticResource AccentButtonStyle}" Height="26" Margin="3,0,0,4" Padding="0" FontSize="11"/>
+                                        <Button Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="1" Content="Upload Custom Image..." Click="BackgroundUpload_Click" Style="{StaticResource AccentButtonStyle}" Height="26" Margin="0,2,0,0" Padding="0" FontSize="11"/>
+                                    </Grid>
+
+                                    <!-- Scale slider -->
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Zoom / Scale:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding ScaleFactor, StringFormat={}{0:F2}x}" Foreground="#ffffff" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <Slider Minimum="0.5" Maximum="2.0" Value="{Binding ScaleFactor}" Margin="0,0,0,12" Focusable="False" SmallChange="0.05" LargeChange="0.2"/>
+
+                                    <!-- Opacity slider -->
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Opacity / Fade:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding ContentOpacity, StringFormat={}{0:P0}}" Foreground="#ffffff" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <Slider Minimum="0.15" Maximum="1.0" Value="{Binding ContentOpacity}" Margin="0,0,0,12" Focusable="False" SmallChange="0.05" LargeChange="0.1"/>
+
+                                    <!-- Border Color Selection -->
+                                    <TextBlock Text="Border Highlight Color:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <UniformGrid Columns="3" Rows="3" Margin="0,0,0,12" HorizontalAlignment="Left">
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="" ToolTip="Default" BorderThickness="1" BorderBrush="#3a3a4c" Background="#22222c"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#00bfa5" ToolTip="Teal" Background="#00bfa5"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#ff6d00" ToolTip="Orange" Background="#ff6d00"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#00c853" ToolTip="Green" Background="#00c853"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#ff007f" ToolTip="Pink" Background="#ff007f"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#5c2dd5" ToolTip="Purple" Background="#5c2dd5"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#d32f2f" ToolTip="Red" Background="#d32f2f"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#fbc02d" ToolTip="Yellow" Background="#fbc02d"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="ColorCircle_Click" Tag="#1976d2" ToolTip="Blue" Background="#1976d2"/>
+                                    </UniformGrid>
+
+                                    <!-- Text/Foreground Color Selection -->
+                                    <TextBlock Text="Text/Notes Color:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,4,0,6"/>
+                                    <UniformGrid Columns="3" Rows="2" Margin="0,0,0,12" HorizontalAlignment="Left">
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="TextColorCircle_Click" Tag="" ToolTip="Default Theme" BorderThickness="1" BorderBrush="#3a3a4c" Background="#22222c"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="TextColorCircle_Click" Tag="#ffffff" ToolTip="White" Background="#ffffff"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="TextColorCircle_Click" Tag="#000000" ToolTip="Black" Background="#000000"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="TextColorCircle_Click" Tag="#222222" ToolTip="Charcoal" Background="#222222"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="TextColorCircle_Click" Tag="#3e2723" ToolTip="Dark Brown" Background="#3e2723"/>
+                                        <Button Style="{StaticResource CircularColorButtonStyle}" Click="TextColorCircle_Click" Tag="#0a192f" ToolTip="Dark Navy" Background="#0a192f"/>
+                                    </UniformGrid>
+
+                                    <!-- Export specific card -->
+                                    <Button Content="📤 Share Card (.noticecard)" Click="ExportCard_Click" Style="{StaticResource AccentButtonStyle}" Height="30" Margin="0,6,0,0" FontSize="11.5"/>
+                                </StackPanel>
+                            </ScrollViewer>
                         </Grid>
 
                         <!-- Bottom: Attached Images area -->
@@ -756,7 +880,7 @@
 
                             <!-- Horizontal thumbnails list -->
                             <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Height="90" Background="#14141c" BorderBrush="#2e2e3d" BorderThickness="1" Margin="0">
-                                <ItemsControl x:Name="DetailImagesList">
+                                <ItemsControl x:Name="DetailImagesList" ItemsSource="{Binding Images}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
                                             <StackPanel Orientation="Horizontal" Margin="6"/>
@@ -789,6 +913,18 @@
                         <Grid Grid.Row="3">
                             <Button Content="Done" Height="34" Click="CloseCardDetail_Click" Style="{StaticResource PrimaryButtonStyle}"/>
                         </Grid>
+                        </Grid>
+                        
+                        <!-- Resizing Grip Thumb -->
+                        <Thumb Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="-16,-16,-16,-16" Cursor="SizeNWSE" DragDelta="FlyoutResize_DragDelta">
+                            <Thumb.Template>
+                                <ControlTemplate TargetType="Thumb">
+                                    <Grid Background="Transparent">
+                                        <Path Data="M 6 12 L 12 6 M 9 12 L 12 9 M 12 12 L 12 12" Stroke="#a0a0b5" StrokeThickness="1.5"/>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Thumb.Template>
+                        </Thumb>
                     </Grid>
                 </Border>
             </Grid>

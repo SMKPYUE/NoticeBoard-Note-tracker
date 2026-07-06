@@ -9,6 +9,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Interop;
+using System.Runtime.InteropServices;
 using Mscc.GenerativeAI;
 
 using System.IO.Compression;
@@ -210,16 +213,40 @@ namespace StoryBoardAI
             }
         }
 
+        public ObservableCollection<string> SystemFontsList { get; } = new ObservableCollection<string>();
+
         public MainWindow()
         {
             InitializeComponent();
             DataContext = this;
+
+            // Populate system fonts list
+            try
+            {
+                foreach (var font in Fonts.SystemFontFamilies.OrderBy(f => f.Source))
+                {
+                    SystemFontsList.Add(font.Source);
+                }
+            }
+            catch
+            {
+                SystemFontsList.Add("Segoe UI");
+                SystemFontsList.Add("Arial");
+                SystemFontsList.Add("Courier New");
+                SystemFontsList.Add("Georgia");
+            }
+
+            // Ensure parchment textures are created
+            EnsureParchmentTexture();
 
             // Restrict window size when maximized to avoid covering taskbar
             this.MaxHeight = SystemParameters.MaximizedPrimaryScreenHeight;
 
             // Load saved data and settings
             LoadData();
+
+            // Register global hotkey Loaded event
+            this.Loaded += MainWindow_Loaded;
         }
 
         protected override void OnClosing(CancelEventArgs e)
@@ -277,7 +304,7 @@ namespace StoryBoardAI
         #region Data Persistence & Serialization
         private string GetAppDataDirectory()
         {
-            string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "StoryBoardAI");
+            string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NoticeBoard");
             if (!Directory.Exists(appData))
             {
                 Directory.CreateDirectory(appData);
@@ -294,6 +321,531 @@ namespace StoryBoardAI
         {
             return Path.Combine(GetAppDataDirectory(), "workspaces.json");
         }
+
+        #region Parchment Texture Generator
+        private string EnsureParchmentTexture()
+        {
+            string dir = Path.Combine(GetAppDataDirectory(), "Textures");
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, "parchment.jpg");
+            if (File.Exists(path)) return path;
+
+            try
+            {
+                int width = 512;
+                int height = 512;
+                var dv = new DrawingVisual();
+                using (var dc = dv.RenderOpen())
+                {
+                    dc.DrawRectangle(
+                        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#f5ebd0")),
+                        null,
+                        new Rect(0, 0, width, height)
+                    );
+
+                    var edgeColor = (Color)ColorConverter.ConvertFromString("#d3c299");
+                    var centerColor = Colors.Transparent;
+                    var grad = new RadialGradientBrush(centerColor, edgeColor)
+                    {
+                        Center = new Point(0.5, 0.5),
+                        GradientOrigin = new Point(0.5, 0.5),
+                        RadiusX = 0.7,
+                        RadiusY = 0.7
+                    };
+                    dc.DrawRectangle(grad, null, new Rect(0, 0, width, height));
+
+                    var rand = new Random(42);
+                    var fiberPen = new Pen(new SolidColorBrush(Color.FromArgb(10, 139, 90, 43)), 1.0);
+                    for (int i = 0; i < 150; i++)
+                    {
+                        double y = rand.NextDouble() * height;
+                        dc.DrawLine(fiberPen, new Point(0, y), new Point(width, y + (rand.NextDouble() * 10 - 5)));
+                    }
+                    for (int i = 0; i < 150; i++)
+                    {
+                        double x = rand.NextDouble() * width;
+                        dc.DrawLine(fiberPen, new Point(x, 0), new Point(x + (rand.NextDouble() * 10 - 5), height));
+                    }
+
+                    for (int i = 0; i < 20; i++)
+                    {
+                        double x = rand.NextDouble() * width;
+                        double y = rand.NextDouble() * height;
+                        double radius = rand.NextDouble() * 12 + 4;
+                        var spotBrush = new RadialGradientBrush(
+                            Color.FromArgb((byte)rand.Next(15, 30), 120, 90, 50),
+                            Colors.Transparent
+                        )
+                        {
+                            Center = new Point(0.5, 0.5),
+                            GradientOrigin = new Point(0.5, 0.5),
+                            RadiusX = 0.5,
+                            RadiusY = 0.5
+                        };
+                        dc.DrawGeometry(spotBrush, null, new EllipseGeometry(new Point(x, y), radius, radius));
+                    }
+                }
+
+                var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                rtb.Render(dv);
+
+                var encoder = new JpegBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(rtb));
+                using (var stream = File.Create(path))
+                {
+                    encoder.Save(stream);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to generate parchment texture: {ex.Message}");
+            }
+
+            return path;
+        }
+        #endregion
+
+        #region Global Hotkey Win32 Support
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        private const int HOTKEY_NEW_NOTE = 9001;
+        private const int HOTKEY_FOCUS_NOTE = 9002;
+        private const int HOTKEY_TOGGLE_LOCK = 9003;
+
+        private const uint MOD_ALT = 0x0001;
+        private const uint MOD_CONTROL = 0x0002;
+        private const uint MOD_SHIFT = 0x0004;
+        private const uint MOD_WIN = 0x0008;
+
+        public static SingleNoteWindow? LastActivePopout { get; set; }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            RegisterAllGlobalHotkeys();
+
+            var helper = new WindowInteropHelper(this);
+            HwndSource source = HwndSource.FromHwnd(helper.Handle);
+            source.AddHook(HwndHook);
+        }
+
+        private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+        private LowLevelKeyboardProc? _proc;
+        private IntPtr _hookID = IntPtr.Zero;
+
+        private const int WH_KEYBOARD_LL = 13;
+        private const int WM_KEYDOWN = 0x0100;
+        private const int WM_SYSKEYDOWN = 0x0104;
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        private void RegisterAllGlobalHotkeys()
+        {
+            UnregisterAllGlobalHotkeys();
+
+            // Check if global hotkeys are enabled in settings
+            if (!CurrentSettings.EnableGlobalHotkeys)
+            {
+                return;
+            }
+
+            _proc = HookCallback;
+            using (var curProcess = System.Diagnostics.Process.GetCurrentProcess())
+            using (var curModule = curProcess.MainModule)
+            {
+                if (curModule != null)
+                {
+                    _hookID = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+                }
+            }
+        }
+
+        private void UnregisterAllGlobalHotkeys()
+        {
+            if (_hookID != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hookID);
+                _hookID = IntPtr.Zero;
+                _proc = null;
+            }
+        }
+
+        private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
+            {
+                int vkCode = Marshal.ReadInt32(lParam);
+                System.Windows.Input.Key key = System.Windows.Input.KeyInterop.KeyFromVirtualKey(vkCode);
+
+                bool ctrl = (System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftCtrl) || 
+                             System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RightCtrl));
+                bool shift = (System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftShift) || 
+                              System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RightShift));
+                bool alt = (System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftAlt) || 
+                            System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RightAlt));
+                bool win = (System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LWin) || 
+                            System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RWin));
+
+                // Format current pressed hotkey combination
+                var parts = new List<string>();
+                if (ctrl) parts.Add("Ctrl");
+                if (shift) parts.Add("Shift");
+                if (alt) parts.Add("Alt");
+                if (win) parts.Add("Win");
+
+                // Exclude modifier-only key presses
+                if (key != System.Windows.Input.Key.LeftCtrl && key != System.Windows.Input.Key.RightCtrl &&
+                    key != System.Windows.Input.Key.LeftShift && key != System.Windows.Input.Key.RightShift &&
+                    key != System.Windows.Input.Key.LeftAlt && key != System.Windows.Input.Key.RightAlt &&
+                    key != System.Windows.Input.Key.LWin && key != System.Windows.Input.Key.RWin)
+                {
+                    parts.Add(key.ToString());
+                    string pressedCombo = string.Join("+", parts);
+
+                    // If currently recording a keybind, intercept and record it!
+                    if (_recordingField != null)
+                    {
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            ProcessKeybindRecord(pressedCombo);
+                        }));
+                        return new IntPtr(1); // Swallow the keypress
+                    }
+
+                    // Check foreground app blocklist
+                    if (IsHotkeyAllowedInForegroundWindow())
+                    {
+                        // Check against configured hotkeys
+                        if (pressedCombo == CurrentSettings.HotkeyNewNote)
+                        {
+                            Dispatcher.BeginInvoke(new Action(() => { AddNewCardAndPopOut(); }));
+                            return new IntPtr(1); // Swallow
+                        }
+                        else if (pressedCombo == CurrentSettings.HotkeyFocusNote)
+                        {
+                            Dispatcher.BeginInvoke(new Action(() => { FocusLastActivePopout(); }));
+                            return new IntPtr(1); // Swallow
+                        }
+                        else if (pressedCombo == CurrentSettings.HotkeyToggleLock)
+                        {
+                            Dispatcher.BeginInvoke(new Action(() => { ToggleLastActivePopoutLock(); }));
+                            return new IntPtr(1); // Swallow
+                        }
+                    }
+                }
+            }
+            return CallNextHookEx(_hookID, nCode, wParam, lParam);
+        }
+
+        private const int WM_HOTKEY = 0x0312;
+
+        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            // We use SetWindowsHookEx for global hotkeys instead of RegisterHotKey.
+            // But we keep HwndHook registered to prevent breaking visual setup.
+            return IntPtr.Zero;
+        }
+
+        private bool IsHotkeyAllowedInForegroundWindow()
+        {
+            if (!CurrentSettings.EnableGlobalHotkeys) return false;
+
+            IntPtr fgWnd = GetForegroundWindow();
+            if (fgWnd == IntPtr.Zero) return true;
+
+            try
+            {
+                GetWindowThreadProcessId(fgWnd, out uint pid);
+                if (pid == 0) return true;
+
+                using (var proc = System.Diagnostics.Process.GetProcessById((int)pid))
+                {
+                    string procName = proc.ProcessName.ToLower();
+                    string title = proc.MainWindowTitle.ToLower();
+
+                    // If user specified blocked process names
+                    if (!string.IsNullOrEmpty(CurrentSettings.BlockedProcesses))
+                    {
+                        string[] blockedList = CurrentSettings.BlockedProcesses.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (string item in blockedList)
+                        {
+                            string term = item.Trim().ToLower();
+                            if (term.Length > 0 && (procName.Contains(term) || title.Contains(term)))
+                            {
+                                return false; // Hotkey is BLOCKED in this foreground app!
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to verify foreground process blocklist: {ex.Message}");
+            }
+
+            return true;
+        }
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool BringWindowToTop(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private const int SW_SHOW = 5;
+
+        public static void ForceWindowToForeground(Window window)
+        {
+            try
+            {
+                var helper = new WindowInteropHelper(window);
+                IntPtr targetHwnd = helper.Handle;
+                if (targetHwnd == IntPtr.Zero) return;
+
+                IntPtr fgHwnd = GetForegroundWindow();
+                if (fgHwnd == IntPtr.Zero || fgHwnd == targetHwnd)
+                {
+                    window.Activate();
+                    window.Focus();
+                    return;
+                }
+
+                uint fgThreadId = GetWindowThreadProcessId(fgHwnd, out _);
+                uint appThreadId = GetCurrentThreadId();
+
+                if (fgThreadId != appThreadId)
+                {
+                    AttachThreadInput(appThreadId, fgThreadId, true);
+                    BringWindowToTop(targetHwnd);
+                    ShowWindow(targetHwnd, SW_SHOW);
+                    SetForegroundWindow(targetHwnd);
+                    AttachThreadInput(appThreadId, fgThreadId, false);
+                }
+                else
+                {
+                    BringWindowToTop(targetHwnd);
+                    ShowWindow(targetHwnd, SW_SHOW);
+                    SetForegroundWindow(targetHwnd);
+                }
+
+                window.Activate();
+                window.Focus();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to force window to foreground: {ex.Message}");
+            }
+        }
+
+        private void FocusLastActivePopout()
+        {
+            var win = LastActivePopout;
+            if (win != null && win.IsLoaded)
+            {
+                ForceWindowToForeground(win);
+                win.FocusContentBox();
+            }
+        }
+
+        private void ToggleLastActivePopoutLock()
+        {
+            var win = LastActivePopout;
+            if (win != null && win.IsLoaded)
+            {
+                win.ToggleLockState();
+            }
+        }
+
+        private string? _recordingField; // "NewNote", "FocusNote", "ToggleLock"
+
+        private void HotkeyRecordBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn)
+            {
+                // Reset all other recording buttons Content to their current settings
+                HotkeyNewNoteBtn.Content = CurrentSettings.HotkeyNewNote;
+                HotkeyFocusNoteBtn.Content = CurrentSettings.HotkeyFocusNote;
+                HotkeyToggleLockBtn.Content = CurrentSettings.HotkeyToggleLock;
+
+                if (btn == HotkeyNewNoteBtn) _recordingField = "NewNote";
+                else if (btn == HotkeyFocusNoteBtn) _recordingField = "FocusNote";
+                else if (btn == HotkeyToggleLockBtn) _recordingField = "ToggleLock";
+
+                btn.Content = "Press keys... (Esc to cancel)";
+                this.Focus();
+            }
+        }
+
+        private void ProcessKeybindRecord(string pressedCombo)
+        {
+            if (_recordingField == null) return;
+
+            // If user pressed Escape key, cancel recording
+            if (pressedCombo.EndsWith("Escape"))
+            {
+                _recordingField = null;
+                HotkeyNewNoteBtn.Content = CurrentSettings.HotkeyNewNote;
+                HotkeyFocusNoteBtn.Content = CurrentSettings.HotkeyFocusNote;
+                HotkeyToggleLockBtn.Content = CurrentSettings.HotkeyToggleLock;
+                return;
+            }
+
+            // Check for overlapping key combos!
+            string other1 = "";
+            string other2 = "";
+            if (_recordingField == "NewNote")
+            {
+                other1 = CurrentSettings.HotkeyFocusNote;
+                other2 = CurrentSettings.HotkeyToggleLock;
+            }
+            else if (_recordingField == "FocusNote")
+            {
+                other1 = CurrentSettings.HotkeyNewNote;
+                other2 = CurrentSettings.HotkeyToggleLock;
+            }
+            else if (_recordingField == "ToggleLock")
+            {
+                other1 = CurrentSettings.HotkeyNewNote;
+                other2 = CurrentSettings.HotkeyFocusNote;
+            }
+
+            if (pressedCombo == other1 || pressedCombo == other2)
+            {
+                MessageBox.Show("This key combination is already bound to another action! Please choose a different shortcut.", "Duplicate Keybind Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return; // Do not apply, keep waiting for another key combination
+            }
+
+            // Save the new keybind
+            if (_recordingField == "NewNote")
+            {
+                CurrentSettings.HotkeyNewNote = pressedCombo;
+                HotkeyNewNoteBtn.Content = pressedCombo;
+            }
+            else if (_recordingField == "FocusNote")
+            {
+                CurrentSettings.HotkeyFocusNote = pressedCombo;
+                HotkeyFocusNoteBtn.Content = pressedCombo;
+            }
+            else if (_recordingField == "ToggleLock")
+            {
+                CurrentSettings.HotkeyToggleLock = pressedCombo;
+                HotkeyToggleLockBtn.Content = pressedCombo;
+            }
+
+            _recordingField = null;
+            SaveData();
+        }
+
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (_recordingField != null)
+            {
+                e.Handled = true;
+                
+                var modifiers = System.Windows.Input.Keyboard.Modifiers;
+                System.Windows.Input.Key key = (e.Key == System.Windows.Input.Key.System) ? e.SystemKey : e.Key;
+
+                if (key == System.Windows.Input.Key.LeftCtrl || key == System.Windows.Input.Key.RightCtrl ||
+                    key == System.Windows.Input.Key.LeftShift || key == System.Windows.Input.Key.RightShift ||
+                    key == System.Windows.Input.Key.LeftAlt || key == System.Windows.Input.Key.RightAlt ||
+                    key == System.Windows.Input.Key.LWin || key == System.Windows.Input.Key.RWin)
+                {
+                    return;
+                }
+
+                var parts = new List<string>();
+                if ((modifiers & System.Windows.Input.ModifierKeys.Control) != 0) parts.Add("Ctrl");
+                if ((modifiers & System.Windows.Input.ModifierKeys.Shift) != 0) parts.Add("Shift");
+                if ((modifiers & System.Windows.Input.ModifierKeys.Alt) != 0) parts.Add("Alt");
+                if ((modifiers & System.Windows.Input.ModifierKeys.Windows) != 0) parts.Add("Win");
+                parts.Add(key.ToString());
+
+                ProcessKeybindRecord(string.Join("+", parts));
+            }
+        }
+
+        private void EnableHotkeys_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            if (HotkeyNewNoteBtn == null || HotkeyFocusNoteBtn == null || HotkeyToggleLockBtn == null || BlockedProcessesBox == null)
+            {
+                return;
+            }
+
+            bool isEnabled = EnableGlobalHotkeysCheckbox.IsChecked == true;
+            HotkeyNewNoteBtn.IsEnabled = isEnabled;
+            HotkeyFocusNoteBtn.IsEnabled = isEnabled;
+            HotkeyToggleLockBtn.IsEnabled = isEnabled;
+            BlockedProcessesBox.IsEnabled = isEnabled;
+
+            // Adjust styling to look dimmed when disabled
+            double opacity = isEnabled ? 1.0 : 0.45;
+            HotkeyNewNoteBtn.Opacity = opacity;
+            HotkeyFocusNoteBtn.Opacity = opacity;
+            HotkeyToggleLockBtn.Opacity = opacity;
+            BlockedProcessesBox.Opacity = opacity;
+        }
+
+        private void AddNewCardAndPopOut()
+        {
+            if (ActiveWorkspace == null) return;
+
+            var newCard = new StoryBoardCard
+            {
+                Title = "Quick Note",
+                Content = "",
+                CardTag = "",
+                FontFamilyName = "Segoe UI",
+                ScaleFactor = 1.0,
+                ContentOpacity = 1.0,
+                BackgroundImagePath = ""
+            };
+
+            ActiveWorkspace.Cards.Add(newCard);
+            SaveData();
+
+            var win = new SingleNoteWindow(newCard);
+            win.Show();
+
+            // Force window to foreground focus
+            ForceWindowToForeground(win);
+            win.FocusContentBox();
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            UnregisterAllGlobalHotkeys();
+            base.OnClosed(e);
+        }
+        #endregion
 
         private void LoadData()
         {
@@ -314,9 +866,20 @@ namespace StoryBoardAI
                 // Force drag and drop to false per user request
                 CurrentSettings.EnableDragDrop = false;
 
+                // Apply Software Rendering if checked
+                if (CurrentSettings.DisableHardwareAcceleration)
+                {
+                    RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+                }
+
+                if (CurrentSettings.HotkeyNewNote == null) CurrentSettings.HotkeyNewNote = "Ctrl+Shift+N";
+                if (CurrentSettings.HotkeyFocusNote == null) CurrentSettings.HotkeyFocusNote = "Ctrl+Shift+F";
+                if (CurrentSettings.HotkeyToggleLock == null) CurrentSettings.HotkeyToggleLock = "Ctrl+Shift+K";
+
                 // Apply settings to UI
                 EnableAiCheckbox.IsChecked = CurrentSettings.EnableAiAssistant;
                 EnableDragDropCheckbox.IsChecked = false; // Force visual unchecked
+                DisableHardwareAccelerationCheckbox.IsChecked = CurrentSettings.DisableHardwareAcceleration;
                 SettingsApiKeyBox.Password = CurrentSettings.ApiKey;
                 ApiKeyBox.Password = CurrentSettings.ApiKey;
                 ApplyAiPanelVisibility(CurrentSettings.EnableAiAssistant);
@@ -391,7 +954,7 @@ namespace StoryBoardAI
             }
         }
 
-        private void SaveData()
+        public void SaveData()
         {
             try
             {
@@ -428,6 +991,19 @@ namespace StoryBoardAI
             EnableDragDropCheckbox.IsChecked = CurrentSettings.EnableDragDrop;
             SettingsApiKeyBox.Password = CurrentSettings.ApiKey;
 
+            // Populate hotkey config
+            EnableGlobalHotkeysCheckbox.IsChecked = CurrentSettings.EnableGlobalHotkeys;
+            HotkeyNewNoteBtn.Content = CurrentSettings.HotkeyNewNote;
+            HotkeyFocusNoteBtn.Content = CurrentSettings.HotkeyFocusNote;
+            HotkeyToggleLockBtn.Content = CurrentSettings.HotkeyToggleLock;
+            BlockedProcessesBox.Text = CurrentSettings.BlockedProcesses ?? "";
+
+            // Populate hardware acceleration
+            DisableHardwareAccelerationCheckbox.IsChecked = CurrentSettings.DisableHardwareAcceleration;
+
+            // Adjust disabled states
+            EnableHotkeys_CheckedChanged(this, new RoutedEventArgs());
+
             // Set selected theme in ComboBox
             foreach (ComboBoxItem item in ThemeComboBox.Items)
             {
@@ -452,6 +1028,27 @@ namespace StoryBoardAI
             CurrentSettings.EnableDragDrop = false; // Always force disable drag & drop
             CurrentSettings.ApiKey = SettingsApiKeyBox.Password.Trim();
             
+            // Save hotkey settings
+            CurrentSettings.EnableGlobalHotkeys = EnableGlobalHotkeysCheckbox.IsChecked == true;
+            CurrentSettings.HotkeyNewNote = HotkeyNewNoteBtn.Content.ToString() ?? "Ctrl+Shift+N";
+            CurrentSettings.HotkeyFocusNote = HotkeyFocusNoteBtn.Content.ToString() ?? "Ctrl+Shift+F";
+            CurrentSettings.HotkeyToggleLock = HotkeyToggleLockBtn.Content.ToString() ?? "Ctrl+Shift+K";
+            CurrentSettings.BlockedProcesses = BlockedProcessesBox.Text.Trim();
+
+            // Save hardware rendering setting
+            CurrentSettings.DisableHardwareAcceleration = DisableHardwareAccelerationCheckbox.IsChecked == true;
+            if (CurrentSettings.DisableHardwareAcceleration)
+            {
+                RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+            }
+            else
+            {
+                RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.Default;
+            }
+
+            // Re-register hotkeys immediately
+            RegisterAllGlobalHotkeys();
+
             // Read and apply Theme setting
             if (ThemeComboBox.SelectedItem is ComboBoxItem selectedThemeItem)
             {
@@ -465,6 +1062,23 @@ namespace StoryBoardAI
 
             SaveData();
             SettingsOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void ResetFlyoutScale_Click(object sender, RoutedEventArgs e)
+        {
+            // Reset the scale factor of the editing card
+            if (_activeEditingCard != null)
+            {
+                _activeEditingCard.ScaleFactor = 1.0;
+            }
+
+            // Reset the flyout border dimensions to defaults (Width=780, Height=580)
+            var border = CardDetailOverlay.Children[0] as Border;
+            if (border != null)
+            {
+                border.Width = 780;
+                border.Height = 580;
+            }
         }
 
         private void ApplyTheme(string themeName)
@@ -984,8 +1598,7 @@ namespace StoryBoardAI
             if (sender is Button btn && btn.DataContext is StoryBoardCard card)
             {
                 _activeEditingCard = card;
-                CardDetailGrid.DataContext = card;
-                DetailImagesList.ItemsSource = card.Images;
+                CardDetailOverlay.DataContext = card;
                 CardDetailOverlay.Visibility = Visibility.Visible;
             }
         }
@@ -1002,6 +1615,15 @@ namespace StoryBoardAI
             if (sender is Button btn && _activeEditingCard != null)
             {
                 _activeEditingCard.BorderColor = btn.Tag?.ToString() ?? "";
+                SaveData();
+            }
+        }
+
+        private void TextColorCircle_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && _activeEditingCard != null)
+            {
+                _activeEditingCard.ForegroundColor = btn.Tag?.ToString() ?? "";
                 SaveData();
             }
         }
@@ -1096,6 +1718,61 @@ namespace StoryBoardAI
             }
         }
 
+        private void BackgroundDefault_Click(object sender, RoutedEventArgs e)
+        {
+            if (_activeEditingCard != null)
+            {
+                _activeEditingCard.BackgroundImagePath = "";
+                SaveData();
+            }
+        }
+
+        private void BackgroundParchment_Click(object sender, RoutedEventArgs e)
+        {
+            if (_activeEditingCard != null)
+            {
+                _activeEditingCard.BackgroundImagePath = "parchment";
+                SaveData();
+            }
+        }
+
+        private void BackgroundUpload_Click(object sender, RoutedEventArgs e)
+        {
+            if (_activeEditingCard == null) return;
+
+            var dialog = new OpenFileDialog();
+            dialog.Filter = "Image Files|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp";
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    string dir = Path.Combine(GetAppDataDirectory(), "Card Backgrounds");
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                    string ext = Path.GetExtension(dialog.FileName);
+                    string uniqueName = $"{Guid.NewGuid()}{ext}";
+                    string destPath = Path.Combine(dir, uniqueName);
+
+                    File.Copy(dialog.FileName, destPath, true);
+                    _activeEditingCard.BackgroundImagePath = destPath;
+                    SaveData();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to upload background: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void PopOutCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is StoryBoardCard card)
+            {
+                var win = new SingleNoteWindow(card);
+                win.Show();
+            }
+        }
+
         private void ExportCard_Click(object sender, RoutedEventArgs e)
         {
             if (_activeEditingCard == null) return;
@@ -1120,8 +1797,29 @@ namespace StoryBoardAI
                         Content = _activeEditingCard.Content,
                         CardTag = _activeEditingCard.CardTag,
                         BorderColor = _activeEditingCard.BorderColor,
+                        FontFamilyName = _activeEditingCard.FontFamilyName,
+                        ScaleFactor = _activeEditingCard.ScaleFactor,
+                        ContentOpacity = _activeEditingCard.ContentOpacity,
                         ImageNames = new List<string>()
                     };
+
+                    // Handle background image export
+                    if (_activeEditingCard.BackgroundImagePath == "parchment")
+                    {
+                        exportCard.BackgroundImagePath = "parchment";
+                    }
+                    else if (!string.IsNullOrEmpty(_activeEditingCard.BackgroundImagePath) && File.Exists(_activeEditingCard.BackgroundImagePath))
+                    {
+                        string bgFileName = "bg_" + Path.GetFileName(_activeEditingCard.BackgroundImagePath);
+                        string destBgPath = Path.Combine(tempDir, bgFileName);
+                        File.Copy(_activeEditingCard.BackgroundImagePath, destBgPath, true);
+                        exportCard.BackgroundImagePath = bgFileName;
+                        exportCard.ImageNames.Add(bgFileName);
+                    }
+                    else
+                    {
+                        exportCard.BackgroundImagePath = "";
+                    }
 
                     foreach (var imgPath in _activeEditingCard.Images)
                     {
@@ -1172,7 +1870,23 @@ namespace StoryBoardAI
                 try
                 {
                     string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-                    ZipFile.ExtractToDirectory(openDlg.FileName, tempDir);
+
+                    // Zip Slip Protection during extraction
+                    using (ZipArchive archive = ZipFile.OpenRead(openDlg.FileName))
+                    {
+                        string targetDir = Path.GetFullPath(tempDir);
+                        foreach (ZipArchiveEntry entry in archive.Entries)
+                        {
+                            string destPath = Path.GetFullPath(Path.Combine(targetDir, entry.FullName));
+                            if (!destPath.StartsWith(targetDir, StringComparison.OrdinalIgnoreCase))
+                            {
+                                throw new InvalidOperationException("Malicious path detected in import package (Zip Slip).");
+                            }
+                        }
+
+                        Directory.CreateDirectory(tempDir);
+                        archive.ExtractToDirectory(tempDir);
+                    }
 
                     string jsonPath = Path.Combine(tempDir, "card.json");
                     if (!File.Exists(jsonPath))
@@ -1194,17 +1908,49 @@ namespace StoryBoardAI
                         Title = exportCard.Title,
                         Content = exportCard.Content,
                         CardTag = exportCard.CardTag,
-                        BorderColor = exportCard.BorderColor
+                        BorderColor = exportCard.BorderColor,
+                        FontFamilyName = exportCard.FontFamilyName ?? "Segoe UI",
+                        ScaleFactor = exportCard.ScaleFactor > 0 ? exportCard.ScaleFactor : 1.0,
+                        ContentOpacity = exportCard.ContentOpacity > 0 ? exportCard.ContentOpacity : 1.0
                     };
+
+                    // Handle background image import
+                    if (exportCard.BackgroundImagePath == "parchment")
+                    {
+                        newCard.BackgroundImagePath = "parchment";
+                    }
+                    else if (!string.IsNullOrEmpty(exportCard.BackgroundImagePath) && exportCard.BackgroundImagePath.StartsWith("bg_"))
+                    {
+                        string cleanBgName = Path.GetFileName(exportCard.BackgroundImagePath);
+                        string srcBgPath = Path.Combine(tempDir, cleanBgName);
+                        if (File.Exists(srcBgPath))
+                        {
+                            string bgDir = Path.Combine(GetAppDataDirectory(), "Card Backgrounds");
+                            if (!Directory.Exists(bgDir)) Directory.CreateDirectory(bgDir);
+
+                            string newBgName = Guid.NewGuid().ToString() + Path.GetExtension(cleanBgName);
+                            string destBgPath = Path.Combine(bgDir, newBgName);
+                            File.Copy(srcBgPath, destBgPath, true);
+                            newCard.BackgroundImagePath = destBgPath;
+                        }
+                    }
+                    else
+                    {
+                        newCard.BackgroundImagePath = "";
+                    }
 
                     string destImagesDir = GetCardImagesDirectory();
 
                     foreach (var imgName in exportCard.ImageNames)
                     {
-                        string srcPath = Path.Combine(tempDir, imgName);
+                        // Skip if it's the background image (already handled)
+                        if (imgName.StartsWith("bg_")) continue;
+
+                        string cleanImgName = Path.GetFileName(imgName);
+                        string srcPath = Path.Combine(tempDir, cleanImgName);
                         if (File.Exists(srcPath))
                         {
-                            string newFileName = Guid.NewGuid().ToString() + Path.GetExtension(imgName);
+                            string newFileName = Guid.NewGuid().ToString() + Path.GetExtension(cleanImgName);
                             string destPath = Path.Combine(destImagesDir, newFileName);
                             File.Copy(srcPath, destPath, true);
                             newCard.Images.Add(destPath);
@@ -1238,6 +1984,24 @@ namespace StoryBoardAI
                 name = name.Replace(c, '_');
             }
             return name;
+        }
+        private void FlyoutResize_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+        {
+            var border = CardDetailOverlay.Children[0] as Border;
+            if (border != null)
+            {
+                double newWidth = border.Width;
+                double newHeight = border.Height;
+
+                if (double.IsNaN(newWidth)) newWidth = 780;
+                if (double.IsNaN(newHeight)) newHeight = 580;
+
+                newWidth += e.HorizontalChange;
+                newHeight += e.VerticalChange;
+
+                if (newWidth >= 500) border.Width = newWidth;
+                if (newHeight >= 400) border.Height = newHeight;
+            }
         }
         #endregion
     }
@@ -1372,6 +2136,92 @@ namespace StoryBoardAI
             throw new NotImplementedException();
         }
     }
+
+    public class BackgroundImageConverter : System.Windows.Data.IValueConverter
+    {
+        private static readonly System.Collections.Generic.Dictionary<string, ImageBrush> _brushCache = 
+            new System.Collections.Generic.Dictionary<string, ImageBrush>();
+
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            string? path = value as string;
+            if (string.IsNullOrEmpty(path))
+                return DependencyProperty.UnsetValue;
+
+            try
+            {
+                string actualPath = path;
+                if (path == "parchment")
+                {
+                    string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NoticeBoard");
+                    actualPath = Path.Combine(appData, "Textures", "parchment.jpg");
+                }
+
+                lock (_brushCache)
+                {
+                    if (_brushCache.TryGetValue(actualPath, out var cachedBrush))
+                    {
+                        return cachedBrush;
+                    }
+                }
+
+                if (File.Exists(actualPath))
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.UriSource = new Uri(actualPath, UriKind.Absolute);
+                    bitmap.EndInit();
+                    bitmap.Freeze(); 
+
+                    var brush = new ImageBrush(bitmap);
+                    if (path == "parchment")
+                    {
+                        brush.TileMode = TileMode.Tile;
+                        brush.ViewportUnits = BrushMappingMode.Absolute;
+                        brush.Viewport = new Rect(0, 0, 256, 256);
+                    }
+                    else
+                    {
+                        brush.Stretch = Stretch.UniformToFill;
+                    }
+
+                    brush.Freeze(); 
+
+                    lock (_brushCache)
+                    {
+                        _brushCache[actualPath] = brush;
+                    }
+                    return brush;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+            return DependencyProperty.UnsetValue;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class CountToVisibilityConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value is int count && count > 0)
+                return Visibility.Visible;
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
     #endregion
 
     #region Export Models
@@ -1382,6 +2232,10 @@ namespace StoryBoardAI
         public string CardTag { get; set; } = "";
         public string BorderColor { get; set; } = "";
         public List<string> ImageNames { get; set; } = new List<string>();
+        public string BackgroundImagePath { get; set; } = "";
+        public string FontFamilyName { get; set; } = "Segoe UI";
+        public double ScaleFactor { get; set; } = 1.0;
+        public double ContentOpacity { get; set; } = 1.0;
     }
     #endregion
 }

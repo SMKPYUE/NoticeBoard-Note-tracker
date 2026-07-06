@@ -20,6 +20,7 @@ namespace StoryBoardAI
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.UriSource = new Uri(imagePath, UriKind.Absolute);
                     bitmap.EndInit();
+                    bitmap.Freeze();
 
                     DisplayImg.Source = bitmap;
                     

@@ -11,6 +11,12 @@ namespace StoryBoardAI
         private bool _isDimmed = false;
         private string _borderColor = ""; // Hex code, e.g. #ff0000, empty means default
         private ObservableCollection<string> _images = new ObservableCollection<string>();
+        private string _backgroundImagePath = ""; // empty, "parchment", or file path
+        private string _fontFamilyName = "Segoe UI";
+        private double _scaleFactor = 1.0;
+        private double _contentOpacity = 1.0;
+        private bool _isPinned = false;
+        private string _foregroundColor = ""; // Hex code, empty means default
 
         public string Title
         {
@@ -87,6 +93,84 @@ namespace StoryBoardAI
             }
         }
 
+        public string BackgroundImagePath
+        {
+            get => _backgroundImagePath;
+            set
+            {
+                if (_backgroundImagePath != value)
+                {
+                    _backgroundImagePath = value;
+                    OnPropertyChanged(nameof(BackgroundImagePath));
+                }
+            }
+        }
+
+        public string FontFamilyName
+        {
+            get => _fontFamilyName;
+            set
+            {
+                if (_fontFamilyName != value)
+                {
+                    _fontFamilyName = value;
+                    OnPropertyChanged(nameof(FontFamilyName));
+                }
+            }
+        }
+
+        public double ScaleFactor
+        {
+            get => _scaleFactor;
+            set
+            {
+                if (_scaleFactor != value)
+                {
+                    _scaleFactor = value;
+                    OnPropertyChanged(nameof(ScaleFactor));
+                }
+            }
+        }
+
+        public double ContentOpacity
+        {
+            get => _contentOpacity;
+            set
+            {
+                if (_contentOpacity != value)
+                {
+                    _contentOpacity = value;
+                    OnPropertyChanged(nameof(ContentOpacity));
+                }
+            }
+        }
+
+        public bool IsPinned
+        {
+            get => _isPinned;
+            set
+            {
+                if (_isPinned != value)
+                {
+                    _isPinned = value;
+                    OnPropertyChanged(nameof(IsPinned));
+                }
+            }
+        }
+
+        public string ForegroundColor
+        {
+            get => _foregroundColor;
+            set
+            {
+                if (_foregroundColor != value)
+                {
+                    _foregroundColor = value;
+                    OnPropertyChanged(nameof(ForegroundColor));
+                }
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged(string propertyName)
         {
@@ -147,5 +231,12 @@ namespace StoryBoardAI
         public bool EnableDragDrop { get; set; } = false; // Disabled by default per user request
         public string ActiveWorkspaceName { get; set; } = "Default Workspace";
         public string ThemeName { get; set; } = "Midnight Purple";
+        public string GlobalHotkey { get; set; } = "Ctrl+Shift+N";
+        public string HotkeyNewNote { get; set; } = "Ctrl+Shift+N";
+        public string HotkeyFocusNote { get; set; } = "Ctrl+Shift+F";
+        public string HotkeyToggleLock { get; set; } = "Ctrl+Shift+K";
+        public bool EnableGlobalHotkeys { get; set; } = true;
+        public string BlockedProcesses { get; set; } = "";
+        public bool DisableHardwareAcceleration { get; set; } = false;
     }
 }
