@@ -1,0 +1,19 @@
+LICENSE AGREEMENT
+
+1. PERMISSIONS
+You are free to:
+- Use the software for any purpose.
+- Modify and edit the source code.
+- Distribute and Fork the software, subject to the conditions below.
+
+2. NON-COMMERCIAL & NO SELLING
+- You may not sell this software or any derivative works for a fee.
+- Bundling: You may include this software in a bundle or package, provided that this software is offered as a free add-on and does not increase the price of the bundle.
+
+3. MANDATORY BACKWARDS COMPATIBILITY
+To prevent fragmentation and data loss, any modified version (fork) that you distribute must maintain full backwards compatibility with the original application's Import and Export data formats.
+- Users must be able to import data exported from the original version into your fork without error.
+- Users must be able to export data from your fork that can be imported back into the original version.
+
+4. NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
