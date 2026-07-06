@@ -20,7 +20,7 @@ NoticeBoard is a modern, dark-themed local desktop application built with WPF an
 - **Hotkey App Blocklist**: Comma-separated blocklist (e.g., `discord, chrome, notepad`) to ignore hotkeys when typing in specific productivity apps.
 - **GPU Stability & Software Rendering**:
   - Implements static texture caching and `.Freeze()` calls on custom backgrounds to eliminate unmanaged DX memory leaks and prevent GPU driver crashes.
-  - Adds a **Disable GPU Hardware Acceleration** option to force software-only rendering, avoiding hardware contention during 3D gaming.
+  - Added a **Disable GPU Hardware Acceleration** option to force software-only rendering, avoiding hardware contention during 3D gaming.
 
 ## How to Build & Run
 
