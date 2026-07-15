@@ -8,9 +8,15 @@ NoticeBoard is a modern, dark-themed local desktop application built with WPF an
 - **Workspace Tags & Dim Filtering**: Tag cards with custom labels (e.g. `#Crime`, `#Report`, `#Cow`, `#Sheep`). Filter the board by any tag; non-matching cards are dimmed and moved to the end, keeping the context visible.
 - **Detailed Card Flyout**: Open a large flyout panel for detailed titles, notes, border highlight customization, custom backgrounds, and attached images.
 - **Visual Highlighting**: Color-code cards with pre-configured color schemes in the application style, including font size/family customizations.
-- **Visual Reference Images**: Attach images to cards (saved locally at `%APPDATA%\NoticeBoard\Card Images\`). Click any image thumbnail to pop it out into a draggable, resizable, borderless window to keep on your desktop.
-- **Import & Export (.noticecard)**: Share any card with its details and attached images into a portable `.noticecard` zip archive to share with others.
-- **Gemini AI Assistant**: Use and get responses directly inside a collapsible, fully hideable panel. (Toggle in settings and supply your own Gemini API Key).
+- **Visual Reference Images**: Attach images to cards (saved locally at `%APPDATA%\NoticeBoard\Card Images\`).
+  - Click any image thumbnail to pop it out into a draggable, resizable, borderless window.
+  - **Non-Destructive Image Annotation**: Draw markings, paths, and circles directly on attached images using a vector pen canvas (colors: Red, Yellow, Green, Blue, White; size slider) and stroke eraser. Strokes are serialized in card data to preserve the original image.
+- **Split Popout Note Window (`📑`)**: Pop out a split layout containing the reference image with active drawing controls on the left, a resizable splitter, and the note editor text box on the right.
+- **Side-by-Side Card View (`📖`)**: Toggle layout inside the main app dashboard to display your reference image directly side-by-side with your note text inside the card.
+- **Import & Export (.noticecard)**: Share any card with its details, attached images, and drawing annotations packaged in a portable `.noticecard` zip archive.
+- **Dual AI Assistants (Gemini & Ollama)**:
+  - **Gemini AI**: Stream responses directly inside a collapsible, fully hideable panel using your Google API Key.
+  - **Local Ollama Integration**: Connect to local self-hosted AI models (Llama3, Mistral, Gemma, etc.) running on your computer. Discovers installed models automatically, running 100% locally and offline without data leaving your machine.
 - **Pop Out Standalone Note Window**: Focus and work on a single note in its own borderless window that supports custom scaling, opacity adjustment, and click-through pin overlay behavior.
 - **Global System Hotkeys (Low-Level Hooks)**:
   - Global triggers to create a **New Note** (default `Ctrl+Shift+N`), **Focus Popout** (default `Ctrl+Shift+F`), and **Toggle Lock** (default `Ctrl+Shift+K`) anywhere, even while in full-screen games.
@@ -36,7 +42,7 @@ dotnet run
 ### Build a Release Executable
 To publish a self-contained single-file executable (includes the .NET runtime, so no prerequisites are needed on target machines):
 ```powershell
-dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained true -o "./Builds/V0.4"
+dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained true -o "./Builds/V0.6"
 ```
 
 ## License

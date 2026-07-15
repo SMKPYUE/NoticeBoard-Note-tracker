@@ -35,6 +35,21 @@ namespace StoryBoardAI
 
         private Workspace? _activeWorkspace;
         private StoryBoardCard? _activeEditingCard;
+
+        // State variables for V0.7 Graph & Connections dragging
+        private bool _isDraggingNode = false;
+        private StoryBoardCard? _draggedCardNode;
+        private Point _nodeDragStartPoint;
+        private double _nodeOrigX = 0;
+        private double _nodeOrigY = 0;
+
+        private bool _isDrawingLink = false;
+        private StoryBoardCard? _linkSourceCard;
+        private System.Windows.Shapes.Line? _tempLinkLine;
+
+        private SmartGroup? _activeSmartGroup;
+        private Point _canvasRightClickPoint;
+
         public Workspace? ActiveWorkspace
         {
             get => _activeWorkspace;
@@ -60,6 +75,11 @@ namespace StoryBoardAI
                 OnPropertyChanged(nameof(DisplayCards));
                 OnPropertyChanged(nameof(AvailableTagsWithNone));
                 UpdateFilterComboBoxItems();
+
+                if (GraphViewRadio != null && GraphViewRadio.IsChecked == true)
+                {
+                    RedrawGraphConnections();
+                }
             }
         }
 
@@ -101,38 +121,83 @@ namespace StoryBoardAI
                 if (ActiveWorkspace == null)
                     return new ObservableCollection<StoryBoardCard>();
 
-                string filter = SelectedFilterTag;
-                if (string.IsNullOrEmpty(filter) || filter == "All Tags")
-                {
-                    foreach (var card in ActiveWorkspace.Cards)
-                    {
-                        card.IsDimmed = false;
-                    }
-                    return ActiveWorkspace.Cards;
-                }
+                string searchQuery = (SearchBar != null) ? SearchBar.Text.Trim() : "";
+                SmartGroup? smartGroup = _activeSmartGroup;
+                string tagFilter = SelectedFilterTag;
 
-                var matching = new ObservableCollection<StoryBoardCard>();
-                var nonMatching = new ObservableCollection<StoryBoardCard>();
+                var filteredList = new System.Collections.Generic.List<StoryBoardCard>();
 
                 foreach (var card in ActiveWorkspace.Cards)
                 {
-                    if (card.CardTag == filter)
+                    // Check live Search Text (case-insensitive)
+                    if (!string.IsNullOrEmpty(searchQuery))
                     {
-                        card.IsDimmed = false;
-                        matching.Add(card);
+                        bool matchesSearch = card.Title.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                                             card.Content.Contains(searchQuery, StringComparison.OrdinalIgnoreCase);
+                        if (!matchesSearch) continue; // Hide completely
                     }
-                    else
+
+                    // Check Smart Group constraints
+                    if (smartGroup != null)
                     {
-                        card.IsDimmed = true;
-                        nonMatching.Add(card);
+                        if (!string.IsNullOrEmpty(smartGroup.SearchText))
+                        {
+                            bool matchesSmartSearch = card.Title.Contains(smartGroup.SearchText, StringComparison.OrdinalIgnoreCase) ||
+                                                      card.Content.Contains(smartGroup.SearchText, StringComparison.OrdinalIgnoreCase);
+                            if (!matchesSmartSearch) continue; // Hide completely
+                        }
+
+                        bool tagsMatch = true;
+                        foreach (var tag in smartGroup.IncludedTags)
+                        {
+                            if (card.CardTag != tag) { tagsMatch = false; break; }
+                        }
+                        if (!tagsMatch) continue; // Hide completely
+
+                        bool tagExcluded = false;
+                        foreach (var tag in smartGroup.ExcludedTags)
+                        {
+                            if (card.CardTag == tag) { tagExcluded = true; break; }
+                        }
+                        if (tagExcluded) continue; // Hide completely
                     }
+
+                    filteredList.Add(card);
                 }
 
-                var combined = new ObservableCollection<StoryBoardCard>();
-                foreach (var c in matching) combined.Add(c);
-                foreach (var c in nonMatching) combined.Add(c);
+                // If Tag Filter is specified, we DIM non-matching cards and push them to the end
+                if (string.IsNullOrEmpty(tagFilter) || tagFilter == "All Tags")
+                {
+                    foreach (var card in filteredList)
+                    {
+                        card.IsDimmed = false;
+                    }
+                    return new ObservableCollection<StoryBoardCard>(filteredList);
+                }
+                else
+                {
+                    var matching = new System.Collections.Generic.List<StoryBoardCard>();
+                    var nonMatching = new System.Collections.Generic.List<StoryBoardCard>();
 
-                return combined;
+                    foreach (var card in filteredList)
+                    {
+                        if (card.CardTag == tagFilter)
+                        {
+                            card.IsDimmed = false;
+                            matching.Add(card);
+                        }
+                        else
+                        {
+                            card.IsDimmed = true;
+                            nonMatching.Add(card);
+                        }
+                    }
+
+                    var combined = new ObservableCollection<StoryBoardCard>();
+                    foreach (var c in matching) combined.Add(c);
+                    foreach (var c in nonMatching) combined.Add(c);
+                    return combined;
+                }
             }
         }
 
@@ -244,6 +309,9 @@ namespace StoryBoardAI
 
             // Load saved data and settings
             LoadData();
+
+            // Initialize Smart Groups list dropdown
+            UpdateSmartGroupsComboBox();
 
             // Register global hotkey Loaded event
             this.Loaded += MainWindow_Loaded;
@@ -427,7 +495,7 @@ namespace StoryBoardAI
         private const uint MOD_SHIFT = 0x0004;
         private const uint MOD_WIN = 0x0008;
 
-        public static SingleNoteWindow? LastActivePopout { get; set; }
+        public static Window? LastActivePopout { get; set; }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
@@ -672,7 +740,14 @@ namespace StoryBoardAI
             if (win != null && win.IsLoaded)
             {
                 ForceWindowToForeground(win);
-                win.FocusContentBox();
+                if (win is SingleNoteWindow singleWin)
+                {
+                    singleWin.FocusContentBox();
+                }
+                else if (win is SplitNoteWindow splitWin)
+                {
+                    splitWin.FocusContentBox();
+                }
             }
         }
 
@@ -681,7 +756,14 @@ namespace StoryBoardAI
             var win = LastActivePopout;
             if (win != null && win.IsLoaded)
             {
-                win.ToggleLockState();
+                if (win is SingleNoteWindow singleWin)
+                {
+                    singleWin.ToggleLockState();
+                }
+                else if (win is SplitNoteWindow splitWin)
+                {
+                    splitWin.ToggleLockState();
+                }
             }
         }
 
@@ -871,10 +953,19 @@ namespace StoryBoardAI
                 {
                     RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
                 }
-
                 if (CurrentSettings.HotkeyNewNote == null) CurrentSettings.HotkeyNewNote = "Ctrl+Shift+N";
                 if (CurrentSettings.HotkeyFocusNote == null) CurrentSettings.HotkeyFocusNote = "Ctrl+Shift+F";
                 if (CurrentSettings.HotkeyToggleLock == null) CurrentSettings.HotkeyToggleLock = "Ctrl+Shift+K";
+
+                if (CurrentSettings.SavedSmartGroups == null)
+                {
+                    CurrentSettings.SavedSmartGroups = new System.Collections.Generic.List<SmartGroup>();
+                }
+
+                // Initialize Ollama defaults if empty
+                if (string.IsNullOrEmpty(CurrentSettings.AiProvider)) CurrentSettings.AiProvider = "Gemini";
+                if (string.IsNullOrEmpty(CurrentSettings.OllamaApiUrl)) CurrentSettings.OllamaApiUrl = "http://localhost:11434";
+                if (string.IsNullOrEmpty(CurrentSettings.OllamaModelName)) CurrentSettings.OllamaModelName = "llama3";
 
                 // Apply settings to UI
                 EnableAiCheckbox.IsChecked = CurrentSettings.EnableAiAssistant;
@@ -882,7 +973,11 @@ namespace StoryBoardAI
                 DisableHardwareAccelerationCheckbox.IsChecked = CurrentSettings.DisableHardwareAcceleration;
                 SettingsApiKeyBox.Password = CurrentSettings.ApiKey;
                 ApiKeyBox.Password = CurrentSettings.ApiKey;
+                SettingsOllamaUrlBox.Text = CurrentSettings.OllamaApiUrl;
+                OllamaModelComboBox.Text = CurrentSettings.OllamaModelName;
+
                 ApplyAiPanelVisibility(CurrentSettings.EnableAiAssistant);
+                ApplyAiChatPanelState();
                 
                 // Apply the saved Color Theme
                 ApplyTheme(CurrentSettings.ThemeName);
@@ -915,6 +1010,10 @@ namespace StoryBoardAI
                         {
                             if (card.CardTag == null) card.CardTag = "";
                         }
+                    }
+                    if (ws.Relationships == null)
+                    {
+                        ws.Relationships = new ObservableCollection<CardRelationship>();
                     }
                 }
 
@@ -991,6 +1090,22 @@ namespace StoryBoardAI
             EnableDragDropCheckbox.IsChecked = CurrentSettings.EnableDragDrop;
             SettingsApiKeyBox.Password = CurrentSettings.ApiKey;
 
+            // Populate Ollama settings
+            SettingsOllamaUrlBox.Text = CurrentSettings.OllamaApiUrl;
+            OllamaModelComboBox.Text = CurrentSettings.OllamaModelName;
+
+            // Select AI Provider ComboBox item
+            foreach (ComboBoxItem item in AiProviderComboBox.Items)
+            {
+                if (item.Content.ToString() == CurrentSettings.AiProvider ||
+                    (item.Content.ToString() == "Gemini AI" && CurrentSettings.AiProvider == "Gemini") ||
+                    (item.Content.ToString() == "Local Ollama" && CurrentSettings.AiProvider == "Ollama"))
+                {
+                    AiProviderComboBox.SelectedItem = item;
+                    break;
+                }
+            }
+
             // Populate hotkey config
             EnableGlobalHotkeysCheckbox.IsChecked = CurrentSettings.EnableGlobalHotkeys;
             HotkeyNewNoteBtn.Content = CurrentSettings.HotkeyNewNote;
@@ -1014,6 +1129,14 @@ namespace StoryBoardAI
                 }
             }
 
+            UpdateAiSettingsVisibility();
+
+            // Load model tags from local Ollama asynchronously
+            if (CurrentSettings.EnableAiAssistant && CurrentSettings.AiProvider == "Ollama")
+            {
+                _ = LoadOllamaModelsAsync(CurrentSettings.OllamaModelName);
+            }
+
             SettingsOverlay.Visibility = Visibility.Visible;
         }
 
@@ -1027,6 +1150,15 @@ namespace StoryBoardAI
             CurrentSettings.EnableAiAssistant = EnableAiCheckbox.IsChecked == true;
             CurrentSettings.EnableDragDrop = false; // Always force disable drag & drop
             CurrentSettings.ApiKey = SettingsApiKeyBox.Password.Trim();
+
+            // Save AI Provider
+            if (AiProviderComboBox.SelectedItem is ComboBoxItem providerItem)
+            {
+                string providerText = providerItem.Content.ToString() ?? "Gemini AI";
+                CurrentSettings.AiProvider = providerText == "Local Ollama" ? "Ollama" : "Gemini";
+            }
+            CurrentSettings.OllamaApiUrl = SettingsOllamaUrlBox.Text.Trim();
+            CurrentSettings.OllamaModelName = OllamaModelComboBox.Text.Trim();
             
             // Save hotkey settings
             CurrentSettings.EnableGlobalHotkeys = EnableGlobalHotkeysCheckbox.IsChecked == true;
@@ -1059,6 +1191,7 @@ namespace StoryBoardAI
             // Apply updates
             ApiKeyBox.Password = CurrentSettings.ApiKey;
             ApplyAiPanelVisibility(CurrentSettings.EnableAiAssistant);
+            ApplyAiChatPanelState();
 
             SaveData();
             SettingsOverlay.Visibility = Visibility.Collapsed;
@@ -1140,6 +1273,136 @@ namespace StoryBoardAI
             {
                 DividerPanel.Visibility = Visibility.Collapsed;
                 ChatPanel.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void EnableAiCheckbox_Changed(object sender, RoutedEventArgs e)
+        {
+            UpdateAiSettingsVisibility();
+        }
+
+        private void AiProviderComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateAiSettingsVisibility();
+        }
+
+        private void UpdateAiSettingsVisibility()
+        {
+            if (EnableAiCheckbox == null || AiProviderPanel == null || GeminiConfigPanel == null || OllamaConfigPanel == null || AiProviderComboBox == null) return;
+
+            bool aiEnabled = EnableAiCheckbox.IsChecked == true;
+            AiProviderPanel.Visibility = aiEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            if (aiEnabled && AiProviderComboBox.SelectedItem is ComboBoxItem selectedItem)
+            {
+                string provider = selectedItem.Content.ToString() ?? "";
+                if (provider == "Gemini AI")
+                {
+                    GeminiConfigPanel.Visibility = Visibility.Visible;
+                    OllamaConfigPanel.Visibility = Visibility.Collapsed;
+                }
+                else if (provider == "Local Ollama")
+                {
+                    GeminiConfigPanel.Visibility = Visibility.Collapsed;
+                    OllamaConfigPanel.Visibility = Visibility.Visible;
+                }
+            }
+            else
+            {
+                GeminiConfigPanel.Visibility = Visibility.Collapsed;
+                OllamaConfigPanel.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private async System.Threading.Tasks.Task LoadOllamaModelsAsync(string selectedModel = "llama3")
+        {
+            if (OllamaModelComboBox == null || SettingsOllamaUrlBox == null) return;
+
+            string url = SettingsOllamaUrlBox.Text.Trim();
+            if (string.IsNullOrEmpty(url)) url = "http://localhost:11434";
+
+            try
+            {
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(3);
+                    var response = await client.GetAsync($"{url}/api/tags");
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string json = await response.Content.ReadAsStringAsync();
+                        using (var doc = JsonDocument.Parse(json))
+                        {
+                            var modelsArray = doc.RootElement.GetProperty("models");
+                            var list = new System.Collections.Generic.List<string>();
+                            foreach (var m in modelsArray.EnumerateArray())
+                            {
+                                if (m.TryGetProperty("name", out var nameProp))
+                                {
+                                    string name = nameProp.GetString() ?? "";
+                                    list.Add(name);
+                                }
+                            }
+
+                            OllamaModelComboBox.Items.Clear();
+                            foreach (var modelName in list)
+                            {
+                                OllamaModelComboBox.Items.Add(modelName);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ollama not running: {ex.Message}");
+            }
+
+            // Ensure the currently configured model name is selectable/typed
+            if (!string.IsNullOrEmpty(selectedModel))
+            {
+                bool found = false;
+                foreach (var item in OllamaModelComboBox.Items)
+                {
+                    if (item.ToString() == selectedModel)
+                    {
+                        OllamaModelComboBox.SelectedItem = item;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    OllamaModelComboBox.Text = selectedModel;
+                }
+            }
+        }
+
+        private async void RefreshOllamaModels_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn)
+            {
+                btn.IsEnabled = false;
+                string prevContent = btn.Content.ToString() ?? "Refresh";
+                btn.Content = "Refreshing...";
+                await LoadOllamaModelsAsync(OllamaModelComboBox.Text);
+                btn.Content = prevContent;
+                btn.IsEnabled = true;
+            }
+        }
+
+        private void ApplyAiChatPanelState()
+        {
+            if (ApiKeyHeaderGrid == null || PlaceholderText == null) return;
+
+            if (CurrentSettings.AiProvider == "Ollama")
+            {
+                ApiKeyHeaderGrid.Visibility = Visibility.Collapsed;
+                PlaceholderText.Text = $"Ask {CurrentSettings.OllamaModelName} about your story beats...";
+            }
+            else
+            {
+                ApiKeyHeaderGrid.Visibility = Visibility.Visible;
+                PlaceholderText.Text = "Ask Gemini about your story beats...";
             }
         }
 
@@ -1233,8 +1496,24 @@ namespace StoryBoardAI
                 dialog.Owner = this;
                 if (dialog.ShowDialog() == true)
                 {
-                    ActiveWorkspace?.Cards.Remove(card);
-                    SaveData();
+                    if (ActiveWorkspace != null)
+                    {
+                        var toRemove = ActiveWorkspace.Relationships
+                            .Where(r => r.SourceCardId == card.Id || r.TargetCardId == card.Id)
+                            .ToList();
+                        foreach (var rel in toRemove)
+                        {
+                            ActiveWorkspace.Relationships.Remove(rel);
+                        }
+
+                        ActiveWorkspace.Cards.Remove(card);
+                        SaveData();
+
+                        if (GraphViewRadio != null && GraphViewRadio.IsChecked == true)
+                        {
+                            RedrawGraphConnections();
+                        }
+                    }
                 }
             }
         }
@@ -1409,7 +1688,7 @@ namespace StoryBoardAI
             if (string.IsNullOrEmpty(prompt)) return;
 
             string apiKey = ApiKeyBox.Password.Trim();
-            if (string.IsNullOrEmpty(apiKey))
+            if (CurrentSettings.AiProvider == "Gemini" && string.IsNullOrEmpty(apiKey))
             {
                 ChatHistoryBox.Text += "System: [Error: Please input your Gemini API Key in Settings or the key box before sending messages.]\n\n";
                 ChatHistoryBox.ScrollToEnd();
@@ -1423,13 +1702,14 @@ namespace StoryBoardAI
             SendBtn.IsEnabled = false;
             ChatInputBox.IsEnabled = false;
 
-            ChatHistoryBox.Text += "Gemini AI: ";
+            string labelName = CurrentSettings.AiProvider == "Ollama" ? CurrentSettings.OllamaModelName : "Gemini AI";
+            ChatHistoryBox.Text += $"{labelName}: ";
             ChatHistoryBox.ScrollToEnd();
 
             try
             {
                 StringBuilder contextBuilder = new StringBuilder();
-                contextBuilder.AppendLine("You are a helpful Gemini AI integrated into NoticeBoard, a notes and story planning application.");
+                contextBuilder.AppendLine("You are a helpful assistant integrated into NoticeBoard, a notes and story planning application.");
                 contextBuilder.AppendLine("Here is the current context of the user's active workspace cards:");
                 contextBuilder.AppendLine("==========================================");
                 if (ActiveWorkspace != null)
@@ -1447,23 +1727,94 @@ namespace StoryBoardAI
 
                 string fullPrompt = contextBuilder.ToString();
 
-                var googleAI = new GoogleAI(apiKey: apiKey);
-                var model = googleAI.GenerativeModel(model: "gemini-1.5-flash");
-
-                var responseStream = model.GenerateContentStream(fullPrompt);
-                await foreach (var chunk in responseStream)
+                if (CurrentSettings.AiProvider == "Ollama")
                 {
-                    if (chunk != null && !string.IsNullOrEmpty(chunk.Text))
+                    using (var client = new System.Net.Http.HttpClient())
                     {
-                        ChatHistoryBox.Text += chunk.Text;
-                        ChatHistoryBox.ScrollToEnd();
+                        client.Timeout = TimeSpan.FromSeconds(60);
+
+                        var payload = new
+                        {
+                            model = CurrentSettings.OllamaModelName,
+                            messages = new[]
+                            {
+                                new { role = "user", content = fullPrompt }
+                            },
+                            stream = true
+                        };
+
+                        string jsonPayload = JsonSerializer.Serialize(payload);
+                        var requestContent = new System.Net.Http.StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+                        string apiUrl = CurrentSettings.OllamaApiUrl;
+                        if (string.IsNullOrEmpty(apiUrl)) apiUrl = "http://localhost:11434";
+
+                        var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, $"{apiUrl}/api/chat")
+                        {
+                            Content = requestContent
+                        };
+
+                        using (var response = await client.SendAsync(request, System.Net.Http.HttpCompletionOption.ResponseHeadersRead))
+                        {
+                            response.EnsureSuccessStatusCode();
+
+                            using (var stream = await response.Content.ReadAsStreamAsync())
+                            using (var reader = new StreamReader(stream))
+                            {
+                                while (!reader.EndOfStream)
+                                {
+                                    string? line = await reader.ReadLineAsync();
+                                    if (string.IsNullOrEmpty(line)) continue;
+
+                                    try
+                                    {
+                                        using (var doc = JsonDocument.Parse(line))
+                                        {
+                                            if (doc.RootElement.TryGetProperty("message", out var msgProp) &&
+                                                msgProp.TryGetProperty("content", out var contentProp))
+                                            {
+                                                string token = contentProp.GetString() ?? "";
+                                                ChatHistoryBox.Text += token;
+                                                ChatHistoryBox.ScrollToEnd();
+                                            }
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Ignore malformed line chunks
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    var googleAI = new GoogleAI(apiKey: apiKey);
+                    var model = googleAI.GenerativeModel(model: "gemini-1.5-flash");
+
+                    var responseStream = model.GenerateContentStream(fullPrompt);
+                    await foreach (var chunk in responseStream)
+                    {
+                        if (chunk != null && !string.IsNullOrEmpty(chunk.Text))
+                        {
+                            ChatHistoryBox.Text += chunk.Text;
+                            ChatHistoryBox.ScrollToEnd();
+                        }
                     }
                 }
                 ChatHistoryBox.Text += "\n\n";
             }
             catch (Exception ex)
             {
-                ChatHistoryBox.Text += $"\n[Error: {ex.Message}]\n\n";
+                if (CurrentSettings.AiProvider == "Ollama")
+                {
+                    ChatHistoryBox.Text += $"\n[Error connecting to Ollama. Make sure Ollama is running locally at '{CurrentSettings.OllamaApiUrl}' and you have downloaded the '{CurrentSettings.OllamaModelName}' model: {ex.Message}]\n\n";
+                }
+                else
+                {
+                    ChatHistoryBox.Text += $"\n[Error: {ex.Message}]\n\n";
+                }
             }
             finally
             {
@@ -1597,9 +1948,18 @@ namespace StoryBoardAI
         {
             if (sender is Button btn && btn.DataContext is StoryBoardCard card)
             {
+                ShowCardDetail(card);
+            }
+        }
+
+        private void ShowCardDetail(StoryBoardCard card)
+        {
+            if (card != null)
+            {
                 _activeEditingCard = card;
                 CardDetailOverlay.DataContext = card;
                 CardDetailOverlay.Visibility = Visibility.Visible;
+                UpdateRelatedNotesList();
             }
         }
 
@@ -1773,6 +2133,15 @@ namespace StoryBoardAI
             }
         }
 
+        private void PopOutSplitCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is StoryBoardCard card)
+            {
+                var win = new SplitNoteWindow(card);
+                win.Show();
+            }
+        }
+
         private void ExportCard_Click(object sender, RoutedEventArgs e)
         {
             if (_activeEditingCard == null) return;
@@ -1800,7 +2169,8 @@ namespace StoryBoardAI
                         FontFamilyName = _activeEditingCard.FontFamilyName,
                         ScaleFactor = _activeEditingCard.ScaleFactor,
                         ContentOpacity = _activeEditingCard.ContentOpacity,
-                        ImageNames = new List<string>()
+                        ImageNames = new List<string>(),
+                        ImageAnnotations = new System.Collections.Generic.Dictionary<string, string>(_activeEditingCard.ImageAnnotations)
                     };
 
                     // Handle background image export
@@ -1911,7 +2281,10 @@ namespace StoryBoardAI
                         BorderColor = exportCard.BorderColor,
                         FontFamilyName = exportCard.FontFamilyName ?? "Segoe UI",
                         ScaleFactor = exportCard.ScaleFactor > 0 ? exportCard.ScaleFactor : 1.0,
-                        ContentOpacity = exportCard.ContentOpacity > 0 ? exportCard.ContentOpacity : 1.0
+                        ContentOpacity = exportCard.ContentOpacity > 0 ? exportCard.ContentOpacity : 1.0,
+                        ImageAnnotations = exportCard.ImageAnnotations != null
+                            ? new System.Collections.Generic.Dictionary<string, string>(exportCard.ImageAnnotations)
+                            : new System.Collections.Generic.Dictionary<string, string>()
                     };
 
                     // Handle background image import
@@ -2004,7 +2377,718 @@ namespace StoryBoardAI
             }
         }
         #endregion
+
+        #region V0.7 Graph, Smart Filter, & Workspace Share Actions
+
+        // 1. View Mode Toggling
+        private void ViewModeRadio_Click(object sender, RoutedEventArgs e)
+        {
+            if (BoardViewRadio == null || BoardScrollViewer == null || GraphScrollViewer == null)
+                return;
+
+            if (BoardViewRadio.IsChecked == true)
+            {
+                BoardScrollViewer.Visibility = Visibility.Visible;
+                GraphScrollViewer.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                BoardScrollViewer.Visibility = Visibility.Collapsed;
+                GraphScrollViewer.Visibility = Visibility.Visible;
+                RedrawGraphConnections();
+            }
+        }
+
+        // 2. Node Drag-and-Drop Movement inside Graph View
+        private void Node_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is StoryBoardCard card)
+            {
+                _isDraggingNode = true;
+                _draggedCardNode = card;
+                _nodeDragStartPoint = e.GetPosition(GraphCanvas);
+                _nodeOrigX = card.GraphX;
+                _nodeOrigY = card.GraphY;
+                fe.CaptureMouse();
+                e.Handled = true;
+            }
+        }
+
+        private void Node_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isDraggingNode && _draggedCardNode != null && sender is FrameworkElement fe)
+            {
+                Point curPos = e.GetPosition(GraphCanvas);
+                double deltaX = curPos.X - _nodeDragStartPoint.X;
+                double deltaY = curPos.Y - _nodeDragStartPoint.Y;
+
+                double newX = _nodeOrigX + deltaX;
+                double newY = _nodeOrigY + deltaY;
+
+                // Snap to boundaries
+                if (newX < 0) newX = 0;
+                if (newY < 0) newY = 0;
+                if (newX > GraphCanvas.Width - 170) newX = GraphCanvas.Width - 170;
+                if (newY > GraphCanvas.Height - 110) newY = GraphCanvas.Height - 110;
+
+                _draggedCardNode.GraphX = newX;
+                _draggedCardNode.GraphY = newY;
+
+                // Dynamically redraw curves while dragging for premium, fluid visual response
+                RedrawGraphConnections();
+                e.Handled = true;
+            }
+        }
+
+        private void Node_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isDraggingNode && sender is FrameworkElement fe)
+            {
+                fe.ReleaseMouseCapture();
+                _isDraggingNode = false;
+                _draggedCardNode = null;
+                SaveData();
+                e.Handled = true;
+            }
+        }
+
+        // 3. Anchor Dragging (Visual Connection Creation)
+        private void LinkAnchor_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is StoryBoardCard card)
+            {
+                _isDrawingLink = true;
+                _linkSourceCard = card;
+
+                Point anchorPos = e.GetPosition(GraphCanvas);
+                _tempLinkLine = new System.Windows.Shapes.Line
+                {
+                    X1 = card.GraphX + 170, // Right border center
+                    Y1 = card.GraphY + 55,
+                    X2 = anchorPos.X,
+                    Y2 = anchorPos.Y,
+                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ff6d00")),
+                    StrokeThickness = 2,
+                    StrokeDashArray = new DoubleCollection(new double[] { 4, 3 })
+                };
+
+                GraphCanvas.Children.Add(_tempLinkLine);
+                GraphCanvas.CaptureMouse();
+                e.Handled = true;
+            }
+        }
+
+        private void GraphCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Left click canvas cancels link drawing
+            if (_isDrawingLink)
+            {
+                CancelLinkDrawing();
+            }
+        }
+
+        private void GraphCanvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isDrawingLink && _tempLinkLine != null)
+            {
+                Point curPos = e.GetPosition(GraphCanvas);
+                _tempLinkLine.X2 = curPos.X;
+                _tempLinkLine.Y2 = curPos.Y;
+            }
+        }
+
+        private void GraphCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isDrawingLink)
+            {
+                Point releasePos = e.GetPosition(GraphCanvas);
+                GraphCanvas.ReleaseMouseCapture();
+
+                // Find card node under release position
+                StoryBoardCard? targetCard = null;
+                if (ActiveWorkspace != null)
+                {
+                    foreach (var card in ActiveWorkspace.Cards)
+                    {
+                        if (card != _linkSourceCard &&
+                            releasePos.X >= card.GraphX && releasePos.X <= card.GraphX + 170 &&
+                            releasePos.Y >= card.GraphY && releasePos.Y <= card.GraphY + 110)
+                        {
+                            targetCard = card;
+                            break;
+                        }
+                    }
+                }
+
+                if (targetCard != null && _linkSourceCard != null)
+                {
+                    // Open overlay dialog
+                    PromptRelationshipCreation(_linkSourceCard, targetCard);
+                }
+
+                CancelLinkDrawing();
+            }
+        }
+
+        private void CancelLinkDrawing()
+        {
+            _isDrawingLink = false;
+            _linkSourceCard = null;
+            if (_tempLinkLine != null)
+            {
+                GraphCanvas.Children.Remove(_tempLinkLine);
+                _tempLinkLine = null;
+            }
+        }
+
+        // 4. Drawing Bezier Connection Curves programmatically
+        private void RedrawGraphConnections()
+        {
+            if (ConnectionsCanvas == null) return;
+            ConnectionsCanvas.Children.Clear();
+
+            if (ActiveWorkspace == null) return;
+
+            foreach (var rel in ActiveWorkspace.Relationships)
+            {
+                var source = ActiveWorkspace.Cards.FirstOrDefault(c => c.Id == rel.SourceCardId);
+                var target = ActiveWorkspace.Cards.FirstOrDefault(c => c.Id == rel.TargetCardId);
+
+                if (source == null || target == null) continue;
+
+                // Center points of both cards
+                double x1 = source.GraphX + 85;
+                double y1 = source.GraphY + 55;
+                double x2 = target.GraphX + 85;
+                double y2 = target.GraphY + 55;
+
+                // Create a beautiful Bezier curve path
+                var path = new System.Windows.Shapes.Path
+                {
+                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(rel.LineColor ?? "#5c2dd5")),
+                    StrokeThickness = 2.5
+                };
+
+                // Add arrow head geometry marker or curve segment
+                var geometry = new PathGeometry();
+                var figure = new PathFigure { StartPoint = new Point(x1, y1), IsClosed = false };
+
+                // Control points for curve curving around
+                double ctrlX1 = x1 + (x2 - x1) * 0.4;
+                double ctrlY1 = y1;
+                double ctrlX2 = x1 + (x2 - x1) * 0.6;
+                double ctrlY2 = y2;
+
+                var segment = new BezierSegment(new Point(ctrlX1, ctrlY1), new Point(ctrlX2, ctrlY2), new Point(x2, y2), true);
+                figure.Segments.Add(segment);
+                geometry.Figures.Add(figure);
+                path.Data = geometry;
+
+                var menu = new ContextMenu { Style = (Style)FindResource("DarkContextMenuStyle") };
+                var editItem = new MenuItem { Header = "Edit Relationship Label..." };
+                editItem.Click += (s, e) => {
+                    var dialog = new InputDialog("Edit Relationship Label:", "Edit Label", rel.Description);
+                    dialog.Owner = this;
+                    if (dialog.ShowDialog() == true)
+                    {
+                        rel.Description = dialog.InputText.Trim();
+                        SaveData();
+                        RedrawGraphConnections();
+                        UpdateRelatedNotesList();
+                    }
+                };
+
+                var deleteItem = new MenuItem { Header = "Delete Link Line" };
+                deleteItem.Click += (s, e) => {
+                    var confirm = new ConfirmDialog("Are you sure you want to delete this link connection?", "Delete Link");
+                    confirm.Owner = this;
+                    if (confirm.ShowDialog() == true)
+                    {
+                        ActiveWorkspace.Relationships.Remove(rel);
+                        SaveData();
+                        RedrawGraphConnections();
+                        UpdateRelatedNotesList();
+                    }
+                };
+
+                menu.Items.Add(editItem);
+                menu.Items.Add(deleteItem);
+
+                path.ContextMenu = menu;
+                path.Cursor = Cursors.Hand;
+
+                ConnectionsCanvas.Children.Add(path);
+
+                // Add midpoint text label for relationship description
+                double midX = x1 + (x2 - x1) * 0.5;
+                double midY = y1 + (y2 - y1) * 0.5;
+
+                // Simple text layout border
+                var labelBorder = new Border
+                {
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a24")),
+                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3a3a4c")),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(3),
+                    Padding = new Thickness(6, 3, 6, 3),
+                    ContextMenu = menu,
+                    Cursor = Cursors.Hand
+                };
+
+                var labelText = new TextBlock
+                {
+                    Text = rel.Description,
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#a0a0b5")),
+                    FontSize = 9.5,
+                    FontWeight = FontWeights.SemiBold
+                };
+
+                labelBorder.Child = labelText;
+
+                // Center the label over the midpoint
+                Canvas.SetLeft(labelBorder, midX - 35);
+                Canvas.SetTop(labelBorder, midY - 12);
+                ConnectionsCanvas.Children.Add(labelBorder);
+            }
+        }
+
+        // 5. Related Notes details navigation
+        private void UpdateRelatedNotesList()
+        {
+            if (RelatedNotesListBox == null || _activeEditingCard == null || ActiveWorkspace == null) return;
+
+            RelatedNotesListBox.Items.Clear();
+
+            var related = ActiveWorkspace.Relationships
+                .Where(r => r.SourceCardId == _activeEditingCard.Id || r.TargetCardId == _activeEditingCard.Id)
+                .Select(r => {
+                    string otherId = (r.SourceCardId == _activeEditingCard.Id) ? r.TargetCardId : r.SourceCardId;
+                    var otherCard = ActiveWorkspace.Cards.FirstOrDefault(c => c.Id == otherId);
+                    return new RelatedCardItem { Relationship = r.Description, Card = otherCard! };
+                })
+                .Where(x => x.Card != null)
+                .ToList();
+
+            foreach (var rel in related)
+            {
+                RelatedNotesListBox.Items.Add(rel);
+            }
+        }
+
+        private void RelatedNoteLink_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is RelatedCardItem item && item.Card != null)
+            {
+                ShowCardDetail(item.Card);
+            }
+        }
+
+        private void LinkSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            UpdateLinkSearchList();
+        }
+
+        private void UpdateLinkSearchList()
+        {
+            if (ActiveWorkspace == null) return;
+            string query = LinkSearchTextBox.Text.Trim();
+            var source = (_linkSourceCard != null) ? _linkSourceCard : _activeEditingCard;
+            if (source == null) return;
+
+            var list = new System.Collections.Generic.List<StoryBoardCard>();
+            foreach (var card in ActiveWorkspace.Cards)
+            {
+                if (card.Id != source.Id)
+                {
+                    if (string.IsNullOrEmpty(query) || card.Title.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    {
+                        list.Add(card);
+                    }
+                }
+            }
+
+            LinkSearchListBox.ItemsSource = list;
+            if (list.Count > 0)
+            {
+                LinkSearchListBox.SelectedIndex = 0;
+            }
+        }
+
+        private void AddCardRelationship_Click(object sender, RoutedEventArgs e)
+        {
+            if (_activeEditingCard == null || ActiveWorkspace == null) return;
+
+            _linkSourceCard = null;
+            LinkSearchTextBox.Text = "";
+            UpdateLinkSearchList();
+
+            LinkLabelTextBox.Text = "relates to";
+            RelationshipOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void PromptRelationshipCreation(StoryBoardCard source, StoryBoardCard target)
+        {
+            _linkSourceCard = source;
+            LinkSearchTextBox.Text = target.Title;
+            UpdateLinkSearchList();
+
+            LinkSearchListBox.SelectedItem = target;
+
+            LinkLabelTextBox.Text = "relates to";
+            RelationshipOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void CloseRelationship_Click(object sender, RoutedEventArgs e)
+        {
+            RelationshipOverlay.Visibility = Visibility.Collapsed;
+            _linkSourceCard = null;
+        }
+
+        private void CreateRelationship_Click(object sender, RoutedEventArgs e)
+        {
+            StoryBoardCard? target = LinkSearchListBox.SelectedItem as StoryBoardCard;
+            string description = LinkLabelTextBox.Text.Trim();
+
+            StoryBoardCard? source = (_linkSourceCard != null) ? _linkSourceCard : _activeEditingCard;
+
+            if (source != null && target != null && !string.IsNullOrEmpty(description) && ActiveWorkspace != null)
+            {
+                var rel = new CardRelationship
+                {
+                    SourceCardId = source.Id,
+                    TargetCardId = target.Id,
+                    Description = description,
+                    LineColor = "#5c2dd5"
+                };
+
+                ActiveWorkspace.Relationships.Add(rel);
+                SaveData();
+
+                UpdateRelatedNotesList();
+                RedrawGraphConnections();
+
+                RelationshipOverlay.Visibility = Visibility.Collapsed;
+                _linkSourceCard = null;
+            }
+        }
+
+        // 6. Smart Groups Dropdown Handlers
+        private void UpdateSmartGroupsComboBox()
+        {
+            if (SmartGroupComboBox == null) return;
+            SmartGroupComboBox.SelectionChanged -= SmartGroupComboBox_SelectionChanged;
+
+            SmartGroupComboBox.Items.Clear();
+            
+            var defaultItem = new ComboBoxItem { Content = "None" };
+            SmartGroupComboBox.Items.Add(defaultItem);
+            SmartGroupComboBox.SelectedItem = defaultItem;
+
+            foreach (var sg in CurrentSettings.SavedSmartGroups)
+            {
+                SmartGroupComboBox.Items.Add(sg.Name);
+            }
+
+            SmartGroupComboBox.SelectionChanged += SmartGroupComboBox_SelectionChanged;
+        }
+
+        private void SmartGroupComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (SmartGroupComboBox.SelectedItem is ComboBoxItem item && item.Content.ToString() == "None")
+            {
+                _activeSmartGroup = null;
+            }
+            else if (SmartGroupComboBox.SelectedItem != null)
+            {
+                string groupName = SmartGroupComboBox.SelectedItem.ToString() ?? "";
+                _activeSmartGroup = CurrentSettings.SavedSmartGroups.FirstOrDefault(sg => sg.Name == groupName);
+            }
+
+            OnPropertyChanged(nameof(DisplayCards));
+        }
+
+        private void AddSmartGroup_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActiveWorkspace == null) return;
+
+            var dialog = new InputDialog("Enter name for the Smart Group:", "New Smart Group");
+            dialog.Owner = this;
+            if (dialog.ShowDialog() == true)
+            {
+                string name = dialog.InputText.Trim();
+                if (string.IsNullOrEmpty(name)) return;
+
+                // Quick build smart group based on currently selected tag filter and search text!
+                // This makes it extremely easy to save the current filter view as a smart group.
+                var sg = new SmartGroup
+                {
+                    Name = name,
+                    SearchText = SearchBar.Text.Trim()
+                };
+
+                if (SelectedFilterTag != "All Tags")
+                {
+                    sg.IncludedTags.Add(SelectedFilterTag);
+                }
+
+                CurrentSettings.SavedSmartGroups.Add(sg);
+                SaveData();
+
+                UpdateSmartGroupsComboBox();
+                
+                // Select the newly created smart group
+                SmartGroupComboBox.SelectedItem = name;
+            }
+        }
+
+        private void DeleteSmartGroup_Click(object sender, RoutedEventArgs e)
+        {
+            if (_activeSmartGroup != null)
+            {
+                CurrentSettings.SavedSmartGroups.Remove(_activeSmartGroup);
+                SaveData();
+                _activeSmartGroup = null;
+                UpdateSmartGroupsComboBox();
+                OnPropertyChanged(nameof(DisplayCards));
+            }
+        }
+
+        private void SearchBar_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (SearchPlaceholder != null)
+            {
+                SearchPlaceholder.Visibility = string.IsNullOrEmpty(SearchBar.Text) ? Visibility.Visible : Visibility.Collapsed;
+            }
+            OnPropertyChanged(nameof(DisplayCards));
+        }
+
+        // 7. Workspace Export & Import ZIP Pipelines
+        private void ExportWorkspace_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActiveWorkspace == null) return;
+
+            var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "NoticeBoard Workspace (*.noticeworkspace)|*.noticeworkspace",
+                FileName = $"{ActiveWorkspace.Name}.noticeworkspace"
+            };
+
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+                    string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+                    Directory.CreateDirectory(tempDir);
+                    Directory.CreateDirectory(Path.Combine(tempDir, "Images"));
+
+                    // 1. Serialize Workspace metadata
+                    string json = JsonSerializer.Serialize(ActiveWorkspace, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(Path.Combine(tempDir, "workspace.json"), json);
+
+                    // 2. Copy card attached images
+                    string localImagesDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NoticeBoard", "Card Images");
+                    foreach (var card in ActiveWorkspace.Cards)
+                    {
+                        foreach (var imgPath in card.Images)
+                        {
+                            string fileName = Path.GetFileName(imgPath);
+                            string sourceFile = Path.Combine(localImagesDir, fileName);
+                            if (File.Exists(sourceFile))
+                            {
+                                File.Copy(sourceFile, Path.Combine(tempDir, "Images", fileName), true);
+                            }
+                        }
+                    }
+
+                    // 3. ZIP package
+                    if (File.Exists(saveFileDialog.FileName)) File.Delete(saveFileDialog.FileName);
+                    System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, saveFileDialog.FileName);
+
+                    Directory.Delete(tempDir, true);
+                    MessageBox.Show("Workspace exported successfully!", "Export Workspace", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to export workspace: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void ImportWorkspace_Click(object sender, RoutedEventArgs e)
+        {
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "NoticeBoard Workspace (*.noticeworkspace)|*.noticeworkspace"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+                    string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+                    Directory.CreateDirectory(tempDir);
+
+                    // Extract ZIP archive
+                    System.IO.Compression.ZipFile.ExtractToDirectory(openFileDialog.FileName, tempDir);
+
+                    string jsonPath = Path.Combine(tempDir, "workspace.json");
+                    if (!File.Exists(jsonPath))
+                    {
+                        throw new Exception("workspace.json metadata is missing from the workspace package.");
+                    }
+
+                    string json = File.ReadAllText(jsonPath);
+                    Workspace importedWorkspace = JsonSerializer.Deserialize<Workspace>(json) ?? throw new Exception("Invalid workspace data.");
+
+                    // Verify unique name
+                    string origName = importedWorkspace.Name;
+                    int count = 1;
+                    while (Workspaces.Any(w => w.Name == importedWorkspace.Name))
+                    {
+                        importedWorkspace.Name = $"{origName} ({count++})";
+                    }
+
+                    // Copy images and update local absolute paths
+                    string localImagesDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NoticeBoard", "Card Images");
+                    Directory.CreateDirectory(localImagesDir);
+
+                    string extractedImagesDir = Path.Combine(tempDir, "Images");
+                    if (Directory.Exists(extractedImagesDir))
+                    {
+                        foreach (var card in importedWorkspace.Cards)
+                        {
+                            var newPaths = new ObservableCollection<string>();
+                            foreach (var imgPath in card.Images)
+                            {
+                                string fileName = Path.GetFileName(imgPath);
+                                string extractedFile = Path.Combine(extractedImagesDir, fileName);
+                                string localFile = Path.Combine(localImagesDir, fileName);
+
+                                if (File.Exists(extractedFile))
+                                {
+                                    File.Copy(extractedFile, localFile, true);
+                                    newPaths.Add(localFile);
+                                }
+                                else
+                                {
+                                    newPaths.Add(imgPath); // Keep fallback path
+                                }
+                            }
+                            card.Images = newPaths;
+                        }
+                    }
+
+                    Directory.Delete(tempDir, true);
+
+                    Workspaces.Add(importedWorkspace);
+                    ActiveWorkspace = importedWorkspace;
+                    SaveData();
+
+                    MessageBox.Show($"Workspace '{importedWorkspace.Name}' imported successfully!", "Import Workspace", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to import workspace: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        // 8. Graph Canvas & Nodes Right-Click Context Menu Actions
+        private void GraphCanvas_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _canvasRightClickPoint = e.GetPosition(GraphCanvas);
+        }
+
+        private void CanvasAddNote_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActiveWorkspace == null) return;
+
+            var newCard = new StoryBoardCard
+            {
+                Title = "New Note",
+                Content = "",
+                GraphX = _canvasRightClickPoint.X,
+                GraphY = _canvasRightClickPoint.Y,
+                FontFamilyName = "Segoe UI",
+                ScaleFactor = 1.0,
+                ContentOpacity = 1.0
+            };
+
+            ActiveWorkspace.Cards.Add(newCard);
+            SaveData();
+        }
+
+        private void CardContextMenuLink_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.DataContext is StoryBoardCard card)
+            {
+                // Set the active card as the source and trigger linking popup overlay
+                _activeEditingCard = card;
+                
+                _linkSourceCard = null;
+                LinkSearchTextBox.Text = "";
+                UpdateLinkSearchList();
+
+                LinkLabelTextBox.Text = "relates to";
+                RelationshipOverlay.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void CardContextMenuEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.DataContext is StoryBoardCard card)
+            {
+                ShowCardDetail(card);
+            }
+        }
+
+        private void CardContextMenuDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.DataContext is StoryBoardCard card)
+            {
+                var dialog = new ConfirmDialog($"Are you sure you want to delete card '{card.Title}'?", "Confirm Card Delete");
+                dialog.Owner = this;
+                if (dialog.ShowDialog() == true)
+                {
+                    if (ActiveWorkspace != null)
+                    {
+                        var toRemove = ActiveWorkspace.Relationships
+                            .Where(r => r.SourceCardId == card.Id || r.TargetCardId == card.Id)
+                            .ToList();
+                        foreach (var rel in toRemove)
+                        {
+                            ActiveWorkspace.Relationships.Remove(rel);
+                        }
+
+                        ActiveWorkspace.Cards.Remove(card);
+                        SaveData();
+
+                        if (GraphViewRadio != null && GraphViewRadio.IsChecked == true)
+                        {
+                            RedrawGraphConnections();
+                        }
+                    }
+                }
+            }
+        }
+
+        #endregion
     }
+
+    #region Custom Converters
+    public class TagsListConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value is ObservableCollection<string> tags)
+            {
+                return string.Join(" ", tags);
+            }
+            return "";
+        }
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => throw new NotImplementedException();
+    }
+    #endregion
 
     #region Custom Input Dialog Helper
     public class InputDialog : Window
@@ -2236,6 +3320,13 @@ namespace StoryBoardAI
         public string FontFamilyName { get; set; } = "Segoe UI";
         public double ScaleFactor { get; set; } = 1.0;
         public double ContentOpacity { get; set; } = 1.0;
+        public System.Collections.Generic.Dictionary<string, string> ImageAnnotations { get; set; } = new System.Collections.Generic.Dictionary<string, string>();
+    }
+
+    public class RelatedCardItem
+    {
+        public string Relationship { get; set; } = "";
+        public StoryBoardCard Card { get; set; } = new StoryBoardCard();
     }
     #endregion
 }

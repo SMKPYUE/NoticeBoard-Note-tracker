@@ -27,6 +27,7 @@
         <!-- Custom Background & Count converters -->
         <local:BackgroundImageConverter x:Key="BackgroundImageConverter"/>
         <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
         <!-- Circular Color Button Style -->
         <Style x:Key="CircularColorButtonStyle" TargetType="Button">
@@ -52,6 +53,48 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Dark Context Menu Style -->
+        <Style x:Key="DarkContextMenuStyle" TargetType="ContextMenu">
+            <Setter Property="Background" Value="#1a1a24"/>
+            <Setter Property="BorderBrush" Value="#3a3a4c"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="2">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Resources>
+                <Style TargetType="MenuItem">
+                    <Setter Property="Foreground" Value="#ffffff"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Padding" Value="12,6"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="MenuItem">
+                                <Border x:Name="Border" Background="{TemplateBinding Background}" BorderThickness="0" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Border" Property="Background" Value="#5c2dd5"/>
+                                        <Setter Property="Foreground" Value="#ffffff"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Style.Resources>
         </Style>
 
         <!-- Dark ComboBox Toggle Button Template -->
@@ -237,6 +280,33 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Toggle Button Style for Pin -->
+        <Style x:Key="PinToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3a3a4c"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#5c2dd5"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Secondary/Accent Button Style -->
         <Style x:Key="AccentButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource SecondaryAccentBGBrush}"/>
@@ -293,6 +363,38 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <!-- Segmented RadioButton Style for view switching -->
+        <Style x:Key="AccentRadioButtonStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#a0a0b5"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#2d2d3d"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1e1e28"/>
+                                <Setter Property="Foreground" Value="#ffffff"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#5c2dd5"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#5c2dd5"/>
+                                <Setter Property="Foreground" Value="#ffffff"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <local:TagsListConverter x:Key="TagsListConverter"/>
     </Window.Resources>
 
     <Border Background="#121218" BorderBrush="#3a3a4c" BorderThickness="1.5" CornerRadius="10" ClipToBounds="True">
@@ -356,26 +458,43 @@
                                 <TextBlock Text="Workspace" FontSize="24" FontWeight="Bold" Foreground="#ffffff"/>
                                 <TextBlock Text="Add, edit and organize your story" FontSize="11" Foreground="#8e8e9f" Margin="0,2,0,0"/>
                             </StackPanel>
-                            
-                            <!-- Workspace selector -->
+                                                <!-- Workspace selector and filters -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                                 <TextBlock Text="Workspace:" Foreground="#a0a0b5" VerticalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="0,0,8,0"/>
-                                <ComboBox x:Name="WorkspaceComboBox" Width="170" Height="32" VerticalContentAlignment="Center"
+                                <ComboBox x:Name="WorkspaceComboBox" Width="140" Height="32" VerticalContentAlignment="Center"
                                           Style="{StaticResource DarkComboBoxStyle}"
                                           ItemsSource="{Binding Workspaces}" DisplayMemberPath="Name"
                                           SelectedItem="{Binding ActiveWorkspace, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-                                <Button Content="+ New" Click="AddWorkspace_Click" Style="{StaticResource AccentButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,4"/>
-                                <Button Content="Delete" Click="DeleteWorkspace_Click" Style="{StaticResource DeleteButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,4"/>
+                                <Button Content="+ New" Click="AddWorkspace_Click" Style="{StaticResource AccentButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,4" ToolTip="Create new workspace"/>
+                                <Button Content="Export" Click="ExportWorkspace_Click" Style="{StaticResource AccentButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,4" ToolTip="Export workspace package"/>
+                                <Button Content="Import" Click="ImportWorkspace_Click" Style="{StaticResource AccentButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,4" ToolTip="Import workspace package"/>
+                                <Button Content="Delete" Click="DeleteWorkspace_Click" Style="{StaticResource DeleteButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,4" ToolTip="Delete current workspace"/>
 
-                                <TextBlock Text="Filter Tag:" Foreground="#a0a0b5" VerticalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="20,0,8,0"/>
-                                <ComboBox x:Name="FilterComboBox" Width="140" Height="32" VerticalContentAlignment="Center"
+                                <TextBlock Text="Filter Tag:" Foreground="#a0a0b5" VerticalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="16,0,8,0"/>
+                                <ComboBox x:Name="FilterComboBox" Width="100" Height="32" VerticalContentAlignment="Center"
                                           Style="{StaticResource DarkComboBoxStyle}"
                                           SelectionChanged="FilterComboBox_SelectionChanged"/>
+
+                                <TextBlock Text="Smart Group:" Foreground="#a0a0b5" VerticalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="16,0,8,0"/>
+                                <ComboBox x:Name="SmartGroupComboBox" Width="120" Height="32" VerticalContentAlignment="Center"
+                                          Style="{StaticResource DarkComboBoxStyle}"
+                                          SelectionChanged="SmartGroupComboBox_SelectionChanged"/>
+                                <Button Content="+" Click="AddSmartGroup_Click" Style="{StaticResource AccentButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,4" ToolTip="Create new Smart Group filter"/>
+                                <Button Content="✕" Click="DeleteSmartGroup_Click" Style="{StaticResource DeleteButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,4" ToolTip="Delete active Smart Group"/>
+
+                                <TextBlock Text="View:" Foreground="#a0a0b5" VerticalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="16,0,8,0"/>
+                                <RadioButton x:Name="BoardViewRadio" Content="Board" IsChecked="True" Style="{StaticResource AccentRadioButtonStyle}" Checked="ViewModeRadio_Click" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <RadioButton x:Name="GraphViewRadio" Content="Graph" Style="{StaticResource AccentRadioButtonStyle}" Checked="ViewModeRadio_Click" VerticalAlignment="Center"/>
                             </StackPanel>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Live Search Text Box -->
+                            <Grid Margin="0,0,10,0">
+                                <TextBox x:Name="SearchBar" Width="150" Height="38" VerticalContentAlignment="Center" Background="#1e1e28" Foreground="#ffffff" BorderBrush="#2d2d3d" BorderThickness="1" Padding="8,6" CaretBrush="#ffffff" TextChanged="SearchBar_TextChanged"/>
+                                <TextBlock x:Name="SearchPlaceholder" Text="🔍 Search notes..." Foreground="#5a5a6a" Margin="8,0,0,0" IsHitTestVisible="False" VerticalAlignment="Center" FontSize="11"/>
+                            </Grid>
                             <Button Content="Import Card" Click="ImportCard_Click" Style="{StaticResource AccentButtonStyle}" Height="38" Margin="0,0,10,0" Padding="12,6"/>
                             <Button Content="🏷 Manage Tags" Click="Tags_Click" Style="{StaticResource AccentButtonStyle}" Height="38" Margin="0,0,10,0" Padding="12,6"/>
                             <Button Content="⚙ Settings" Click="Settings_Click" Style="{StaticResource AccentButtonStyle}" Height="38" Margin="0,0,10,0" Padding="12,6"/>
@@ -384,7 +503,7 @@
                     </Grid>
 
                     <!-- Workspace Cards list -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer x:Name="BoardScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{Binding DisplayCards}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -393,7 +512,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="{Binding BackgroundImagePath, Converter={StaticResource BackgroundImageConverter}, TargetNullValue={x:Null}, FallbackValue=#1e1e28}" BorderThickness="1.5" CornerRadius="8" Margin="8" Width="250" Height="300"
+                                    <Border Background="{Binding BackgroundImagePath, Converter={StaticResource BackgroundImageConverter}, TargetNullValue={x:Null}, FallbackValue=#1e1e28}" BorderThickness="1.5" CornerRadius="8" Margin="8"
                                             BorderBrush="{Binding BorderColor, Converter={StaticResource BorderColorConverter}}"
                                             PreviewMouseLeftButtonDown="Card_PreviewMouseLeftButtonDown" MouseMove="Card_MouseMove" 
                                             AllowDrop="True" Drop="Card_Drop" DragOver="Card_DragOver"
@@ -401,10 +520,15 @@
                                             RenderTransformOrigin="0.5,0.5">
                                         <Border.Style>
                                             <Style TargetType="Border">
+                                                <Setter Property="Width" Value="250"/>
+                                                <Setter Property="Height" Value="300"/>
                                                 <Setter Property="Opacity" Value="1.0"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                                                         <Setter Property="Opacity" Value="0.35"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ShowImageSideBySide}" Value="True">
+                                                        <Setter Property="Width" Value="480"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -432,24 +556,48 @@
                                                      FontFamily="{Binding FontFamilyName}"/>
 
                                             <!-- Tag selection on the Card -->
-                                            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
-                                                <TextBlock Text="Tag:" Foreground="#a0a0b5" VerticalAlignment="Center" FontSize="11.5" FontWeight="SemiBold" Margin="0,0,6,0"/>
-                                                <ComboBox ItemsSource="{Binding DataContext.AvailableTagsWithNone, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          SelectedItem="{Binding CardTag, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                          Style="{StaticResource DarkComboBoxStyle}"
-                                                          Height="26" Width="100" FontSize="11" VerticalContentAlignment="Center"/>
-                                                <Button Content="📝" Click="EditCardDetails_Click" Style="{StaticResource AccentButtonStyle}" Width="26" Height="26" Margin="4,0,0,0" Padding="0" FontSize="11" ToolTip="Edit Details / Add Images"/>
-                                                <Button Content="↗" Click="PopOutCard_Click" Style="{StaticResource AccentButtonStyle}" Width="26" Height="26" Margin="4,0,0,0" Padding="0" FontSize="11" FontWeight="Bold" ToolTip="Pop Out Standalone Note Window"/>
-                                            </StackPanel>
+                                             <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
+                                                 <TextBlock Text="Tag:" Foreground="#a0a0b5" VerticalAlignment="Center" FontSize="11.5" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                                                 <ComboBox ItemsSource="{Binding DataContext.AvailableTagsWithNone, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                           SelectedItem="{Binding CardTag, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                           Style="{StaticResource DarkComboBoxStyle}"
+                                                           Height="26" Width="95" FontSize="11" VerticalContentAlignment="Center"/>
+                                                 <Button Content="📝" Click="EditCardDetails_Click" Style="{StaticResource AccentButtonStyle}" Width="26" Height="26" Margin="4,0,0,0" Padding="0" FontSize="11" ToolTip="Edit Details / Add Images"/>
+                                                 <Button Content="↗" Click="PopOutCard_Click" Style="{StaticResource AccentButtonStyle}" Width="26" Height="26" Margin="4,0,0,0" Padding="0" FontSize="11" FontWeight="Bold" ToolTip="Pop Out Standalone Note Window"/>
+                                                 
+                                                 <!-- Popout Split Note Button (Only visible if there are images) -->
+                                                 <Button Content="📑" Click="PopOutSplitCard_Click" Style="{StaticResource AccentButtonStyle}" Width="26" Height="26" Margin="4,0,0,0" Padding="0" FontSize="11.5" ToolTip="Pop Out Split Image/Note Window" Visibility="{Binding Images.Count, Converter={StaticResource CountToVisibilityConverter}}"/>
 
-                                            <!-- Content of the Card -->
-                                            <TextBox Grid.Row="2" Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}" 
-                                                     Background="Transparent" 
-                                                     Foreground="{Binding ForegroundColor, Converter={StaticResource BorderColorConverter}, TargetNullValue={x:Null}, FallbackValue=#dcdce5}" 
-                                                     BorderThickness="0" 
-                                                     Padding="4" FontSize="12" AcceptsReturn="True" TextWrapping="Wrap" 
-                                                     VerticalScrollBarVisibility="Auto" CaretBrush="#ffffff" AcceptsTab="True"
-                                                     FontFamily="{Binding FontFamilyName}"/>
+                                                 <!-- Side-by-side toggle button (Only visible if there are images) -->
+                                                 <ToggleButton IsChecked="{Binding ShowImageSideBySide}" Style="{StaticResource PinToggleButtonStyle}" Width="26" Height="26" Margin="4,0,0,0" Padding="0" ToolTip="Toggle Side-by-Side Reference Image" Visibility="{Binding Images.Count, Converter={StaticResource CountToVisibilityConverter}}">
+                                                     <ToggleButton.Content>
+                                                         <TextBlock Text="📖" FontSize="11.5"/>
+                                                     </ToggleButton.Content>
+                                                 </ToggleButton>
+                                             </StackPanel>
+
+                                             <!-- Content area supporting Side-by-Side Reference Layout -->
+                                             <Grid Grid.Row="2">
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="Auto"/>
+                                                     <ColumnDefinition Width="*"/>
+                                                 </Grid.ColumnDefinitions>
+
+                                                 <!-- Pinned Image (Visible only when ShowImageSideBySide is true) -->
+                                                 <Border Grid.Column="0" Width="180" CornerRadius="4" ClipToBounds="True" Margin="0,0,10,0" BorderBrush="#3a3a4c" BorderThickness="1"
+                                                         Visibility="{Binding ShowImageSideBySide, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                     <Image Source="{Binding Images[0]}" Stretch="UniformToFill"/>
+                                                 </Border>
+
+                                                 <!-- Card Content Text Box -->
+                                                 <TextBox Grid.Column="1" Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}" 
+                                                          Background="Transparent" 
+                                                          Foreground="{Binding ForegroundColor, Converter={StaticResource BorderColorConverter}, TargetNullValue={x:Null}, FallbackValue=#dcdce5}" 
+                                                          BorderThickness="0" 
+                                                          Padding="4" FontSize="12" AcceptsReturn="True" TextWrapping="Wrap" 
+                                                          VerticalScrollBarVisibility="Auto" CaretBrush="#ffffff" AcceptsTab="True"
+                                                          FontFamily="{Binding FontFamilyName}"/>
+                                             </Grid>
 
                                             <!-- Bottom control panel inside Card -->
                                             <Grid Grid.Row="3" Margin="0,10,0,0">
@@ -472,6 +620,70 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Graph Canvas View -->
+                    <ScrollViewer x:Name="GraphScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Visibility="Collapsed">
+                        <Canvas x:Name="GraphCanvas" Width="2000" Height="2000" Background="#0f0f14"
+                                MouseLeftButtonDown="GraphCanvas_MouseLeftButtonDown"
+                                MouseLeftButtonUp="GraphCanvas_MouseLeftButtonUp"
+                                MouseMove="GraphCanvas_MouseMove"
+                                MouseRightButtonDown="GraphCanvas_MouseRightButtonDown">
+                            
+                            <Canvas.ContextMenu>
+                                <ContextMenu Style="{StaticResource DarkContextMenuStyle}">
+                                    <MenuItem Header="Add New Note Here" Click="CanvasAddNote_Click"/>
+                                </ContextMenu>
+                            </Canvas.ContextMenu>
+                            
+                            <!-- Sub-canvas to draw lines programmatically in code-behind -->
+                            <Canvas x:Name="ConnectionsCanvas" Width="2000" Height="2000" IsHitTestVisible="True"/>
+
+                            <!-- Graph nodes items control -->
+                            <ItemsControl x:Name="GraphNodesControl" ItemsSource="{Binding ActiveWorkspace.Cards}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas IsItemsHost="True"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding GraphX, Mode=TwoWay}"/>
+                                        <Setter Property="Canvas.Top" Value="{Binding GraphY, Mode=TwoWay}"/>
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{Binding BorderColor, Converter={StaticResource BorderColorConverter}}" BorderThickness="1.5" CornerRadius="6" Width="170" Height="110" Background="#1e1e28" Padding="10" PreviewMouseLeftButtonDown="Node_PreviewMouseLeftButtonDown" MouseMove="Node_MouseMove" PreviewMouseLeftButtonUp="Node_PreviewMouseLeftButtonUp" Cursor="SizeAll">
+                                            <Border.ContextMenu>
+                                                <ContextMenu Style="{StaticResource DarkContextMenuStyle}">
+                                                    <MenuItem Header="Quick Link to another note..." Click="CardContextMenuLink_Click"/>
+                                                    <MenuItem Header="Edit Note details..." Click="CardContextMenuEdit_Click"/>
+                                                    <MenuItem Header="Delete Note" Click="CardContextMenuDelete_Click"/>
+                                                </ContextMenu>
+                                            </Border.ContextMenu>
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <!-- Card Title -->
+                                                <TextBlock Grid.Row="0" Text="{Binding Title}" Foreground="#ffffff" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"/>
+                                                <!-- Brief notes preview -->
+                                                <TextBlock Grid.Row="1" Text="{Binding Content}" Foreground="#a0a0b5" FontSize="9.5" TextWrapping="Wrap" TextTrimming="WordEllipsis" LineHeight="12" Margin="0,0,10,0" Height="52"/>
+
+                                                <!-- Dynamic tags list -->
+                                                <TextBlock Grid.Row="2" Text="{Binding Tags, Converter={StaticResource TagsListConverter}}" Foreground="#8a8ab0" FontSize="8.5" TextTrimming="CharacterEllipsis"/>
+
+                                                <!-- Circular Connection Anchor handle (Center-Right edge) -->
+                                                <Ellipse x:Name="LinkAnchor" Width="12" Height="12" Fill="#5c2dd5" Stroke="#ffffff" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,-16,0" Cursor="Hand" MouseLeftButtonDown="LinkAnchor_MouseLeftButtonDown"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Canvas>
                     </ScrollViewer>
                 </Grid>
 
@@ -498,7 +710,7 @@
                     </Grid.RowDefinitions>
 
                     <!-- API Key Header Area -->
-                    <Grid Grid.Row="0" Margin="16" SnapsToDevicePixels="True">
+                    <Grid x:Name="ApiKeyHeaderGrid" Grid.Row="0" Margin="16" SnapsToDevicePixels="True">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -556,7 +768,7 @@
                         <!-- Settings Body -->
                         <StackPanel Grid.Row="1" Orientation="Vertical" Margin="0,0,0,20">
                             <!-- Enable AI checkbox -->
-                            <CheckBox x:Name="EnableAiCheckbox" Content="Enable Gemini AI Assistant" Foreground="#ffffff" FontSize="13" Margin="0,0,0,16" VerticalContentAlignment="Center">
+                            <CheckBox x:Name="EnableAiCheckbox" Content="Enable Streaming AI Assistant" Checked="EnableAiCheckbox_Changed" Unchecked="EnableAiCheckbox_Changed" Foreground="#ffffff" FontSize="13" Margin="0,0,0,16" VerticalContentAlignment="Center">
                                 <CheckBox.Resources>
                                     <Style TargetType="CheckBox">
                                         <Setter Property="Cursor" Value="Hand"/>
@@ -564,9 +776,38 @@
                                 </CheckBox.Resources>
                             </CheckBox>
 
-                            <!-- API Key -->
-                            <TextBlock Text="Gemini API Key:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                            <PasswordBox x:Name="SettingsApiKeyBox" Background="#1e1e28" Foreground="#ffffff" BorderBrush="#2d2d3d" BorderThickness="1" Padding="8,6" PasswordChar="●" Margin="0,0,0,16"/>
+                            <!-- AI Provider Selector Panel -->
+                            <StackPanel x:Name="AiProviderPanel" Orientation="Vertical" Margin="0,0,0,16" Visibility="Collapsed">
+                                <TextBlock Text="AI Provider:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="AiProviderComboBox" Height="32" VerticalContentAlignment="Center"
+                                          Style="{StaticResource DarkComboBoxStyle}" SelectionChanged="AiProviderComboBox_SelectionChanged">
+                                    <ComboBoxItem Content="Gemini AI"/>
+                                    <ComboBoxItem Content="Local Ollama"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Gemini API Config -->
+                            <StackPanel x:Name="GeminiConfigPanel" Orientation="Vertical" Margin="0,0,0,16" Visibility="Collapsed">
+                                <TextBlock Text="Gemini API Key:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <PasswordBox x:Name="SettingsApiKeyBox" Background="#1e1e28" Foreground="#ffffff" BorderBrush="#2d2d3d" BorderThickness="1" Padding="8,6" PasswordChar="●"/>
+                            </StackPanel>
+
+                            <!-- Ollama API Config -->
+                            <StackPanel x:Name="OllamaConfigPanel" Orientation="Vertical" Margin="0,0,0,16" Visibility="Collapsed">
+                                <TextBlock Text="Ollama API URL:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <TextBox x:Name="SettingsOllamaUrlBox" Background="#1e1e28" Foreground="#ffffff" BorderBrush="#2d2d3d" BorderThickness="1" Padding="8,6" CaretBrush="#ffffff" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Ollama Model Name:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox x:Name="OllamaModelComboBox" Grid.Column="0" Height="32" VerticalContentAlignment="Center"
+                                              Style="{StaticResource DarkComboBoxStyle}" IsEditable="True"/>
+                                    <Button Content="Refresh" Grid.Column="1" Click="RefreshOllamaModels_Click" Style="{StaticResource AccentButtonStyle}" Height="32" Margin="6,0,0,0" Padding="8,0"/>
+                                </Grid>
+                            </StackPanel>
 
                             <!-- Theme Selection -->
                             <TextBlock Text="Color Theme:" Foreground="#a0a0b5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
@@ -858,6 +1099,30 @@
 
                                     <!-- Export specific card -->
                                     <Button Content="📤 Share Card (.noticecard)" Click="ExportCard_Click" Style="{StaticResource AccentButtonStyle}" Height="30" Margin="0,6,0,0" FontSize="11.5"/>
+
+                                    <!-- Separator Line -->
+                                    <Border BorderBrush="#2e2e3d" BorderThickness="0,1,0,0" Margin="0,12,0,12"/>
+
+                                    <!-- Related notes list -->
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Related Notes:" Foreground="#a0a0b5" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <Button Content="Link" Grid.Column="1" Click="AddCardRelationship_Click" Style="{StaticResource AccentButtonStyle}" Padding="6,2" FontSize="11" Height="24"/>
+                                    </Grid>
+                                    
+                                    <ListBox x:Name="RelatedNotesListBox" Background="#14141c" BorderBrush="#2e2e3d" BorderThickness="1" MaxHeight="100" Margin="0,0,0,12">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Foreground="#b39ddb" FontSize="11.5" Cursor="Hand" TextTrimming="CharacterEllipsis" PreviewMouseLeftButtonUp="RelatedNoteLink_Click">
+                                                    <Run Text="{Binding Relationship, StringFormat=[{0}]}" Foreground="#8e8e9f"/>
+                                                    <Run Text="{Binding Card.Title}" FontWeight="SemiBold"/>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
                                 </StackPanel>
                             </ScrollViewer>
                         </Grid>
@@ -925,6 +1190,73 @@
                                 </ControlTemplate>
                             </Thumb.Template>
                         </Thumb>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- ==================== CREATE RELATIONSHIP OVERLAY ==================== -->
+            <Grid x:Name="RelationshipOverlay" Grid.Row="0" Grid.RowSpan="2" Background="#cc080810" Visibility="Collapsed">
+                <Border Background="#1a1a24" BorderBrush="#3a3a4c" BorderThickness="1.5" CornerRadius="10" 
+                        Padding="24" Width="380" Height="420" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="25" ShadowDepth="6" Opacity="0.7"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Header -->
+                        <TextBlock Grid.Row="0" Text="Link to Another Note" FontSize="16" FontWeight="Bold" Foreground="#ffffff" Margin="0,0,0,16"/>
+
+                        <!-- Body -->
+                        <Grid Grid.Row="1" Margin="0,0,0,16">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Text="Search Target Note:" Foreground="#a0a0b5" FontSize="11.5" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <TextBox Grid.Row="1" x:Name="LinkSearchTextBox" Height="30" Background="#1e1e28" Foreground="#ffffff" BorderBrush="#2d2d3d" BorderThickness="1" Padding="8,4" CaretBrush="#ffffff" TextChanged="LinkSearchTextBox_TextChanged" Margin="0,0,0,8"/>
+                            
+                            <ListBox Grid.Row="2" x:Name="LinkSearchListBox" Background="#14141c" BorderBrush="#2e2e3d" BorderThickness="1" Height="140" DisplayMemberPath="Title">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Foreground" Value="#ffffff"/>
+                                        <Setter Property="Padding" Value="8,4"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter Property="Background" Value="#5c2dd5"/>
+                                                <Setter Property="Foreground" Value="#ffffff"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#2d2d3d"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
+
+                            <TextBlock Grid.Row="3" Text="Relationship Label (e.g. leads to, knows):" Foreground="#a0a0b5" FontSize="11.5" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                            <TextBox Grid.Row="4" x:Name="LinkLabelTextBox" Height="30" Background="#1e1e28" Foreground="#ffffff" BorderBrush="#2d2d3d" BorderThickness="1" Padding="8,4" CaretBrush="#ffffff" Text="relates to"/>
+                        </Grid>
+
+                        <!-- Buttons -->
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Content="Cancel" Grid.Column="0" Height="34" Click="CloseRelationship_Click" Style="{StaticResource AccentButtonStyle}"/>
+                            <Button Content="Create Link" Grid.Column="2" Height="34" Click="CreateRelationship_Click" Style="{StaticResource PrimaryButtonStyle}"/>
+                        </Grid>
                     </Grid>
                 </Border>
             </Grid>

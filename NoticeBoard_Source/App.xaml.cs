@@ -15,9 +15,24 @@ namespace StoryBoardAI
             base.OnStartup(e);
         }
 
+        private static DateTime _lastErrorTime = DateTime.MinValue;
+
         private void App_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
         {
-            MessageBox.Show($"Unhandled UI Error:\n\n{e.Exception.Message}\n\nStack Trace:\n{e.Exception.StackTrace}", "NoticeBoard - Unhandled Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            var now = DateTime.Now;
+            if ((now - _lastErrorTime).TotalMilliseconds < 500)
+            {
+                Environment.Exit(1);
+            }
+            _lastErrorTime = now;
+
+            var ex = e.Exception;
+            string msg = ex.Message;
+            if (ex.InnerException != null)
+            {
+                msg += $"\n\nInner Exception:\n{ex.InnerException.Message}\n{ex.InnerException.StackTrace}";
+            }
+            MessageBox.Show($"Unhandled UI Error:\n\n{msg}\n\nStack Trace:\n{ex.StackTrace}", "NoticeBoard - Unhandled Error", MessageBoxButton.OK, MessageBoxImage.Error);
             e.Handled = true; // Keep app running
         }
 

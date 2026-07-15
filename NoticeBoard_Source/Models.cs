@@ -5,6 +5,7 @@ namespace StoryBoardAI
 {
     public class StoryBoardCard : INotifyPropertyChanged
     {
+        public string Id { get; set; } = System.Guid.NewGuid().ToString();
         private string _title = "New Card";
         private string _content = "";
         private string _cardTag = "";
@@ -171,6 +172,63 @@ namespace StoryBoardAI
             }
         }
 
+        private System.Collections.Generic.Dictionary<string, string> _imageAnnotations = new System.Collections.Generic.Dictionary<string, string>();
+        public System.Collections.Generic.Dictionary<string, string> ImageAnnotations
+        {
+            get
+            {
+                if (_imageAnnotations == null) _imageAnnotations = new System.Collections.Generic.Dictionary<string, string>();
+                return _imageAnnotations;
+            }
+            set
+            {
+                _imageAnnotations = value;
+                OnPropertyChanged(nameof(ImageAnnotations));
+            }
+        }
+
+        private bool _showImageSideBySide = false;
+        public bool ShowImageSideBySide
+        {
+            get => _showImageSideBySide;
+            set
+            {
+                if (_showImageSideBySide != value)
+                {
+                    _showImageSideBySide = value;
+                    OnPropertyChanged(nameof(ShowImageSideBySide));
+                }
+            }
+        }
+
+        private double _graphX = 50;
+        public double GraphX
+        {
+            get => _graphX;
+            set
+            {
+                if (Math.Abs(_graphX - value) > 0.001)
+                {
+                    _graphX = value;
+                    OnPropertyChanged(nameof(GraphX));
+                }
+            }
+        }
+
+        private double _graphY = 50;
+        public double GraphY
+        {
+            get => _graphY;
+            set
+            {
+                if (Math.Abs(_graphY - value) > 0.001)
+                {
+                    _graphY = value;
+                    OnPropertyChanged(nameof(GraphY));
+                }
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged(string propertyName)
         {
@@ -217,6 +275,17 @@ namespace StoryBoardAI
             }
         }
 
+        private ObservableCollection<CardRelationship> _relationships = new ObservableCollection<CardRelationship>();
+        public ObservableCollection<CardRelationship> Relationships
+        {
+            get => _relationships;
+            set
+            {
+                _relationships = value;
+                OnPropertyChanged(nameof(Relationships));
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged(string propertyName)
         {
@@ -238,5 +307,27 @@ namespace StoryBoardAI
         public bool EnableGlobalHotkeys { get; set; } = true;
         public string BlockedProcesses { get; set; } = "";
         public bool DisableHardwareAcceleration { get; set; } = false;
+        public string AiProvider { get; set; } = "Gemini";
+        public string OllamaApiUrl { get; set; } = "http://localhost:11434";
+        public string OllamaModelName { get; set; } = "llama3";
+        public System.Collections.Generic.List<SmartGroup> SavedSmartGroups { get; set; } = new System.Collections.Generic.List<SmartGroup>();
+    }
+
+    public class CardRelationship
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string SourceCardId { get; set; } = "";
+        public string TargetCardId { get; set; } = "";
+        public string Description { get; set; } = "relates to";
+        public string LineColor { get; set; } = "#5c2dd5";
+    }
+
+    public class SmartGroup
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = "New Smart Group";
+        public string SearchText { get; set; } = "";
+        public System.Collections.Generic.List<string> IncludedTags { get; set; } = new System.Collections.Generic.List<string>();
+        public System.Collections.Generic.List<string> ExcludedTags { get; set; } = new System.Collections.Generic.List<string>();
     }
 }
