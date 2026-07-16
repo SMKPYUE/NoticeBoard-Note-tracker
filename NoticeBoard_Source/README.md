@@ -5,7 +5,13 @@ NoticeBoard is a modern, dark-themed local desktop application built with WPF an
 ## Features
 
 - **Separate Workspaces**: Organize projects or storylines into separate, isolated boards.
-- **Workspace Tags & Dim Filtering**: Tag cards with custom labels (e.g. `#Crime`, `#Report`, `#Cow`, `#Sheep`). Filter the board by any tag; non-matching cards are dimmed and moved to the end, keeping the context visible.
+- **Visual Mind-Map Canvas (Graph View)**: 
+  - Switch to a 2D interactive whiteboard canvas that plots note cards as draggable nodes.
+  - Draw custom-labeled Bezier curves between card anchor points to create visual relationship links (e.g. *leads to*, *antagonist of*).
+  - Canvas right-click context menu options to add new notes exactly at the cursor coordinates, edit relationship labels, or delete connections.
+- **Smart Search Groups**: Create and save compound filter categories using keywords, tag inclusions, and tag exclusions to easily manage large collections of notes.
+- **Workspace ZIP Sharing (.noticeworkspace)**: Export and Import entire workspaces as portable package files, automatically copying all reference files, metadata, and drawing annotations.
+- **Workspace Tags & Dim Filtering**: Tag cards with custom labels (e.g. `#Crime`, `#Report`, `#Character`). Filter the board by any tag; non-matching cards are dimmed and moved to the end, keeping the context visible.
 - **Detailed Card Flyout**: Open a large flyout panel for detailed titles, notes, border highlight customization, custom backgrounds, and attached images.
 - **Visual Highlighting**: Color-code cards with pre-configured color schemes in the application style, including font size/family customizations.
 - **Visual Reference Images**: Attach images to cards (saved locally at `%APPDATA%\NoticeBoard\Card Images\`).
@@ -42,7 +48,7 @@ dotnet run
 ### Build a Release Executable
 To publish a self-contained single-file executable (includes the .NET runtime, so no prerequisites are needed on target machines):
 ```powershell
-dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained true -o "./Builds/V0.6"
+dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained true -o "./Builds/V0.7"
 ```
 
 ## License
@@ -50,4 +56,6 @@ Refer to the `LICENSE` file for permissions and mandatory backwards compatibilit
 
 ---
 
-**Disclaimer:** I'm open with it, I do use AI in my workflow for structuring (cleanup, error checking, and output formatting). My main editor for coding is VSCode. (If you see any messy lines, give me a shout!)
+**Disclaimer:** I do use AI in my workflow for structuring (cleanup, error checking, and output formatting). 
+My main editor for coding is VSCode. 
+(If you see any messy lines, give me a shout!)
